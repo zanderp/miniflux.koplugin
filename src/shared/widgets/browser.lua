@@ -443,16 +443,18 @@ function Browser:navigate(nav_config)
     -- Handle navigation state based on view data
     if view_data.is_root then
         self.paths = {}
-        self.onReturn = nil
     end
 
-    -- Set up back button based on final navigation history
+    -- Set up back/close: when at root use deferred close so Back/X never blocks the device
     if #self.paths > 0 then
         self.onReturn = function()
             self:goBack()
         end
     else
-        self.onReturn = nil -- At root
+        -- At root (main): Back/X should close the browser via deferred close to avoid hang
+        self.onReturn = function()
+            self:close()
+        end
     end
 
     -- Render the view using returned data
