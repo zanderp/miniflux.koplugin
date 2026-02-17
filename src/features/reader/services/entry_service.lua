@@ -89,6 +89,34 @@ end
 -- PUBLIC API METHODS
 -- =============================================================================
 
+---Perform auto-mark-as-read when opening an entry (e.g. HTML viewer), same behavior as local read.
+---Respects mark_as_read_on_open; updates local metadata and spawns server sync when enabled and entry is unread.
+---@param entry_id number Entry ID
+---@param current_status string Current status from listing/metadata ("read" or "unread")
+---@return nil
+function ReaderEntryService:performAutoMarkAsRead(entry_id, current_status)
+    if not EntryValidation.isValidId(entry_id) then
+        return
+    end
+    if not self.settings.mark_as_read_on_open then
+        return
+    end
+    if current_status == 'read' then
+        return
+    end
+    EntryMetadata.updateEntryStatus(entry_id, {
+        new_status = 'read',
+        doc_settings = nil,
+    })
+    local pid = self:spawnUpdateStatus(entry_id)
+    if pid then
+        ReaderEntryService.entry_subprocesses[entry_id] = pid
+        self.miniflux_plugin:trackSubprocess(pid)
+    end
+    local MinifluxEvent = require('shared/event')
+    MinifluxEvent:broadcastMinifluxInvalidateCache()
+end
+
 ---Change entry status with API sync and queue fallback
 ---@param entry_id number Entry ID to update
 ---@param new_status string New status ("read" or "unread")

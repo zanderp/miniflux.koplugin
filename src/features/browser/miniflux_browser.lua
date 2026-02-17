@@ -158,7 +158,7 @@ function MinifluxBrowser:onLeftButtonTap()
     end
 
     local UIManager = require('ui/uimanager')
-    local ButtonDialogTitle = require('ui/widget/buttondialogtitle')
+    local ButtonDialog = require('ui/widget/buttondialog')
     local NetworkMgr = require('ui/network/manager')
 
     -- Check network status every time settings is opened
@@ -230,7 +230,7 @@ function MinifluxBrowser:onLeftButtonTap()
         },
     })
 
-    self.config_dialog = ButtonDialogTitle:new({
+    self.config_dialog = ButtonDialog:new({
         title = _('Miniflux Settings'),
         title_align = 'center',
         buttons = buttons,
@@ -335,7 +335,11 @@ function MinifluxBrowser:openItem(entry_data, context)
         end
         -- In-app HTML viewer (HtmlBoxWidget) for Kindle and other devices without a browser
         local HtmlViewer = require('features/reader/html_viewer')
-        HtmlViewer.showUrl(entry_data.url, entry_data.title)
+        HtmlViewer.showUrl(entry_data.url, entry_data.title, {
+            parent_browser = self,
+            entry_data = entry_data,
+            miniflux = self.miniflux,
+        })
         return
     end
     -- Use workflow directly for download-if-needed and open
@@ -344,7 +348,39 @@ function MinifluxBrowser:openItem(entry_data, context)
         entry_data = entry_data,
         settings = self.settings,
         context = context,
+        miniflux = self.miniflux,
     })
+end
+
+---At root, close both browser and plugin so one X exits to KOReader (matches upstream: we close
+---both when opening an entry via BrowserCloseRequest; also needed when user used "Return to Miniflux" from end-of-entry).
+---Otherwise delegate to base Browser (back / close overlay).
+function MinifluxBrowser:close()
+    local at_root = not self.paths or #self.paths == 0
+    logger.dbg('[Miniflux:Browser] close() at_root:', at_root, 'paths:', self.paths and #self.paths or 0)
+    if not at_root then
+        return Browser.close(self)
+    end
+    logger.info('[Browser] Closing browser (and plugin)')
+    local self_ref = self
+    local miniflux = self.miniflux
+    UIManager:scheduleIn(0, function()
+        local overlay = self_ref.current_overlay
+        if overlay and UIManager:isWidgetShown(overlay) then
+            self_ref.current_overlay = nil
+            UIManager:close(overlay)
+            UIManager:scheduleIn(0, function()
+                if UIManager:isWidgetShown(self_ref) then UIManager:close(self_ref) end
+                if miniflux and UIManager:isWidgetShown(miniflux) then UIManager:close(miniflux, 'full') end
+                UIManager:setDirty('all', 'full')
+            end)
+        else
+            if overlay then self_ref.current_overlay = nil end
+            if UIManager:isWidgetShown(self_ref) then UIManager:close(self_ref) end
+            if miniflux and UIManager:isWidgetShown(miniflux) then UIManager:close(miniflux, 'full') end
+            UIManager:setDirty('all', 'full')
+        end
+    end)
 end
 
 ---Get Miniflux-specific route handlers (implements Browser:getRouteHandlers)

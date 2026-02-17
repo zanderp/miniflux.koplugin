@@ -1,4 +1,4 @@
-local ButtonDialogTitle = require('ui/widget/buttondialogtitle')
+local ButtonDialog = require('ui/widget/buttondialog')
 local UIManager = require('ui/uimanager')
 local Notification = require('shared/widgets/notification')
 local _ = require('gettext')
@@ -169,7 +169,7 @@ function SyncService:processEntryStatusQueue(auto_confirm, silent)
     -- Ask user for confirmation unless auto_confirm is true
     if not auto_confirm then
         local sync_dialog
-        sync_dialog = ButtonDialogTitle:new({
+        sync_dialog = ButtonDialog:new({
             title = T(_('Sync %1 pending status changes?'), queue_size),
             title_align = 'center',
             buttons = {
@@ -364,7 +364,7 @@ function SyncService:showSyncConfirmationDialog(total_count, opts)
         or string.format(_('Sync %d pending changes?'), total_count)
 
     local confirm_dialog
-    confirm_dialog = ButtonDialogTitle:new({
+    confirm_dialog = ButtonDialog:new({
         title = message,
         title_align = 'center',
         buttons = {

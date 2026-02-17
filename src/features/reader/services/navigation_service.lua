@@ -88,6 +88,7 @@ local Navigation = {}
 ---@return nil
 function Navigation.navigateToEntry(entry_info, miniflux, navigation_options)
     local direction = navigation_options.direction
+    logger.dbg('[Miniflux:NavigationService] navigateToEntry entry_id:', entry_info.entry_id, 'direction:', direction)
 
     -- Validate input
     if not entry_info.entry_id then
@@ -205,6 +206,7 @@ function Navigation.handleApiNavigation(options)
                 entry_info = entry_info,
                 entry_data = target_entry,
                 context = context,
+                miniflux = miniflux,
             })
         then
             -- Use workflow directly for download-if-needed and open
@@ -213,6 +215,7 @@ function Navigation.handleApiNavigation(options)
                 entry_data = target_entry,
                 settings = miniflux.settings,
                 context = context,
+                miniflux = miniflux,
             })
         end
     else
@@ -258,6 +261,7 @@ function Navigation.handleLocalNavigation(options)
                 entry_data = target_entry_data,
                 settings = miniflux.settings,
                 context = context,
+                miniflux = miniflux,
             })
         else
             logger.err(
@@ -349,6 +353,7 @@ end
 ---@field entry_info table Current entry information
 ---@field entry_data table Entry data from API
 ---@field context? MinifluxContext Navigation context to preserve
+---@field miniflux? table Plugin instance (for re-opening browser when reader closes)
 
 ---Try to open local file if it exists
 ---@param opts TryLocalFileOptions Options for local file attempt
@@ -357,6 +362,8 @@ function Navigation.tryLocalFileFirst(opts)
     local entry_info = opts.entry_info
     local entry_data = opts.entry_data
     local context = opts.context
+    local miniflux = opts.miniflux
+    logger.dbg('[Miniflux:NavigationService] tryLocalFileFirst entry_id:', entry_data and entry_data.id)
 
     local html_file = EntryPaths.getEntryHtmlPath(entry_data.id)
 
@@ -369,11 +376,13 @@ function Navigation.tryLocalFileFirst(opts)
     end
 
     if is_downloaded then
+        logger.dbg('[Miniflux:NavigationService] tryLocalFileFirst: opening local file')
         local EntryReader = require('features/reader/services/open_entry')
-        EntryReader.openEntry(html_file, { context = context })
+        EntryReader.openEntry(html_file, { context = context, miniflux = miniflux })
         return true
     end
 
+    logger.dbg('[Miniflux:NavigationService] tryLocalFileFirst: not downloaded')
     return false
 end
 

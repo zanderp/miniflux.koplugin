@@ -359,11 +359,13 @@ local EntryWorkflow = {}
 
 ---Execute complete entry workflow with progress tracking (fire-and-forget)
 ---Downloads entry, creates files, and opens in reader with full user interaction support
----@param deps {entry_data: table, settings: table, context?: MinifluxContext}
+---@param deps {entry_data: table, settings: table, context?: MinifluxContext, miniflux?: table}
 function EntryWorkflow.execute(deps)
     local entry_data = deps.entry_data
     local settings = deps.settings
     local browser_context = deps.context
+    local miniflux = deps.miniflux
+    logger.dbg('[Miniflux:EntryWorkflow] execute entry_id:', entry_data and entry_data.id)
 
     -- Validate entry data with enhanced validation
     local _valid, err = EntryValidation.validateForDownload(entry_data)
@@ -404,9 +406,11 @@ function EntryWorkflow.execute(deps)
         if EntryPaths.isEntryDownloaded(entry_data.id) then
             local html_file = EntryPaths.getEntryHtmlPath(entry_data.id)
             -- Use EntryReader for clean entry opening
+            logger.dbg('[Miniflux:EntryWorkflow] download complete, opening entry:', html_file and html_file:match('[^/]+$'))
             local EntryReader = require('features/reader/services/open_entry')
             EntryReader.openEntry(html_file, {
                 context = browser_context,
+                miniflux = miniflux,
             })
             return -- Completed - fire and forget
         end
@@ -589,9 +593,11 @@ function EntryWorkflow.execute(deps)
             success_count,
             'images'
         )
+        logger.dbg('[Miniflux:EntryWorkflow] open existing local file:', context.html_file and context.html_file:match('[^/]+$'))
         local EntryReader = require('features/reader/services/open_entry')
         EntryReader.openEntry(context.html_file, {
             context = browser_context,
+            miniflux = miniflux,
         })
 
         -- Reset phase to idle on completion (important for module-level state)

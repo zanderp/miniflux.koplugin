@@ -14,18 +14,25 @@ local DEFAULT_TIMEOUT = 30
 
 ---Fetch URL and return body as string
 ---@param url string Full URL to fetch
----@param opts? { timeout?: number, max_size?: number }
+---@param opts? { timeout?: number, max_size?: number, headers?: table } Optional headers (e.g. User-Agent for mobile)
 ---@return string|nil body, string|nil error
 function UrlFetch.fetch(url, opts)
     opts = opts or {}
     local max_size = opts.max_size or MAX_BODY_SIZE
     local timeout = opts.timeout or DEFAULT_TIMEOUT
+    local default_headers = { ['User-Agent'] = 'KOReader/1.0 (Miniflux)' }
+    local headers = opts.headers and (function()
+        local h = {}
+        for k, v in pairs(default_headers) do h[k] = v end
+        for k, v in pairs(opts.headers) do h[k] = v end
+        return h
+    end)() or default_headers
 
     local response_body = {}
     local request = {
         url = url,
         method = 'GET',
-        headers = { ['User-Agent'] = 'KOReader/1.0 (Miniflux)' },
+        headers = headers,
         sink = ltn12.sink.table(response_body),
     }
 

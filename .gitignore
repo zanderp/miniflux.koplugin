@@ -1,5 +1,8 @@
 dist/
 
+# Local release build script (exact commands for versioned zip)
+release-build.ps1
+
 # Nix/direnv
 .direnv/
 result

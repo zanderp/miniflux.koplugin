@@ -8,6 +8,7 @@ Handles data fetching, menu building, and UI rendering.
 --]]
 
 local _ = require('gettext')
+local logger = require('logger')
 local ViewUtils = require('features/browser/views/view_utils')
 local EntryCollections = require('domains/utils/entry_collections')
 
@@ -37,6 +38,7 @@ function MainView.show(config)
             MainView._cached_counts = nil
         else
             -- Return immediately with placeholder and load in background so we don't block (fixes X/Back hang)
+            logger.dbg('[Miniflux:MainView] async load: returning placeholder, scheduling loadData')
             counts = {
                 unread_count = 0,
                 feeds_count = 0,
@@ -46,10 +48,28 @@ function MainView.show(config)
             local miniflux = config.miniflux
             local browser = miniflux and miniflux.browser
             UIManager:scheduleIn(0, function()
-                local loaded, _err = MainView.loadData(miniflux, { silent = true })
-                if loaded and browser then
-                    MainView._cached_counts = loaded
-                    browser:refreshCurrentViewData()
+                if not miniflux then
+                    logger.dbg('[Miniflux:MainView] async load: miniflux nil, skip')
+                    return
+                end
+                local ok, loaded = pcall(MainView.loadData, miniflux, { silent = true })
+                if not ok or not loaded or type(loaded) ~= 'table' then
+                    logger.dbg('[Miniflux:MainView] async load: loadData failed or empty, ok:', ok)
+                    return
+                end
+                MainView._cached_counts = loaded
+                -- Only refresh if browser is still shown (user may have closed it)
+                if browser and UIManager:isWidgetShown(browser) then
+                    logger.dbg('[Miniflux:MainView] async load: refreshing current view')
+                    local ok, _err2 = pcall(function()
+                        browser:refreshCurrentViewData()
+                    end)
+                    if not ok then
+                        logger.dbg('[Miniflux:MainView] async load: refreshCurrentViewData failed')
+                        MainView._cached_counts = nil
+                    end
+                else
+                    logger.dbg('[Miniflux:MainView] async load: browser not shown, skip refresh')
                 end
             end)
         end

@@ -45,6 +45,7 @@ function Browser:init()
     self.current_mode = BrowserMode.NORMAL
     self.selected_items = nil
     self.last_selected_index = nil
+    self.current_overlay = nil -- optional widget on top (e.g. HTML viewer); closed first on Browser:close() to avoid hang
     self.show_parent = self.show_parent or self
 
     local TitleBar = require('ui/widget/titlebar')
@@ -193,10 +194,14 @@ function Browser:showSelectionActionsDialog()
     UIManager:show(self.selection_dialog)
 end
 
----Handle right button tap
+---Handle right button tap (X icon in title bar). When not at root, go back one level; at root, close browser.
 function Browser:onRightButtonTap()
+    local at_root = not self.paths or #self.paths == 0
+    logger.dbg('[Browser] Right button tap, selection:', self:isCurrentMode(BrowserMode.SELECTION), 'at_root:', at_root)
     if self:isCurrentMode(BrowserMode.SELECTION) then
         self:showSelectionActionsDialog()
+    elseif not at_root then
+        self:goBack()
     else
         self:close()
     end
@@ -389,6 +394,7 @@ end
 ---Navigation is deferred so the current event handler returns immediately and the UI does not hang
 ---when the target view (e.g. main) does synchronous work (e.g. API calls).
 function Browser:goBack()
+    logger.dbg('[Browser] goBack, paths count:', self.paths and #self.paths or 0)
     -- Exit selection mode before navigating back to prevent crashes
     if self:isCurrentMode(BrowserMode.SELECTION) then
         self:transitionTo(BrowserMode.NORMAL)
@@ -468,17 +474,55 @@ function Browser:navigate(nav_config)
 end
 
 ---Close the browser. Deferred so the current event handler returns immediately and the UI does not hang.
+---If an overlay (e.g. HTML viewer) is still on the stack, close it first then close the browser in the next tick
+---so the device does not hang (e.g. after opening HTML and returning to menu via Home, then pressing X).
+---Idempotent: if plugin already closed us (UIManager no longer shows us), we no-op.
 function Browser:close()
     logger.info('[Browser] Closing browser')
     local self_ref = self
     UIManager:scheduleIn(0, function()
-        UIManager:close(self_ref)
+        if not UIManager:isWidgetShown(self_ref) then
+            logger.dbg('[Browser] close deferred: widget not shown, no-op')
+            return
+        end
+        local overlay = self_ref.current_overlay
+        if overlay and UIManager:isWidgetShown(overlay) then
+            logger.dbg('[Browser] close deferred: closing overlay first')
+            self_ref.current_overlay = nil
+            UIManager:close(overlay)
+            UIManager:scheduleIn(0, function()
+                if UIManager:isWidgetShown(self_ref) then
+                    UIManager:close(self_ref)
+                end
+            end)
+        else
+            logger.dbg('[Browser] close deferred: closing browser (no overlay)')
+            if overlay then
+                self_ref.current_overlay = nil
+            end
+            UIManager:close(self_ref)
+        end
     end)
 end
 
 -- =============================================================================
 -- EVENT HANDLERS
 -- =============================================================================
+
+---Handle Close key so it goes back when not at root (e.g. in Starred), instead of closing the plugin.
+function Browser:handleEvent(ev)
+    if ev.type == 'Close' then
+        local at_root = not self.paths or #self.paths == 0
+        logger.dbg('[Browser] Close key, at_root:', at_root, 'paths:', self.paths and #self.paths or 0)
+        if not at_root then
+            self:goBack()
+            return true
+        end
+        self:close()
+        return true
+    end
+    return BookList.handleEvent(self, ev)
+end
 
 ---Handle browser close requested event
 ---@param payload? { reason?: string } Event payload with close reason

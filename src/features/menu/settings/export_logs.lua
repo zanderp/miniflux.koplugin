@@ -59,6 +59,7 @@ end
 ---@return boolean success
 ---@return string? error_message
 function ExportLogs.exportLogs()
+    logger.dbg('[Miniflux:ExportLogs] exportLogs start')
     local logs_found = findLogFiles()
     local runtime_logs = getRuntimeLogs()
 
@@ -87,11 +88,21 @@ Note: crash.log is only created after a crash.]])
         return false, _('Failed to create export file.')
     end
 
-    -- Write header
+    -- Write header (guard Device calls - getPlatformName can be missing or throw on some builds)
+    local device_info = 'unknown'
+    local platform_name = 'unknown'
+    pcall(function()
+        device_info = Device:info() or device_info
+    end)
+    pcall(function()
+        if Device.getPlatformName then
+            platform_name = Device:getPlatformName() or platform_name
+        end
+    end)
     export_file:write('Miniflux Plugin Debug Log Export\n')
     export_file:write('Generated: ' .. os.date('%Y-%m-%d %H:%M:%S') .. '\n')
-    export_file:write('Device: ' .. Device:info() .. '\n')
-    export_file:write('Platform: ' .. Device:getPlatformName() .. '\n')
+    export_file:write('Device: ' .. tostring(device_info) .. '\n')
+    export_file:write('Platform: ' .. tostring(platform_name) .. '\n')
     export_file:write('=' .. string.rep('=', 60) .. '\n\n')
 
     local has_content = false
@@ -164,7 +175,14 @@ This will:
 • Save to your Miniflux folder for easy sharing]]),
                 ok_text = _('Export'),
                 ok_callback = function()
-                    local success, result = ExportLogs.exportLogs()
+                    local success, result
+                    local ok, err = pcall(function()
+                        success, result = ExportLogs.exportLogs()
+                    end)
+                    if not ok then
+                        success = false
+                        result = tostring(err)
+                    end
 
                     if success then
                         UIManager:show(ConfirmBox:new({
@@ -177,9 +195,17 @@ This will:
                             ok_text = _('OK'),
                             cancel_text = _('Open Folder'),
                             cancel_callback = function()
-                                -- Open the folder containing the log file
-                                local FileManager = require('apps/filemanager/filemanager')
-                                FileManager:showFiles(EntryPaths.getDownloadDir())
+                                -- Defer so dialog closes first; avoid crash/restart when switching to file manager
+                                local download_dir = EntryPaths.getDownloadDir()
+                                UIManager:scheduleIn(0, function()
+                                    local ok, err = pcall(function()
+                                        local FileManager = require('apps/filemanager/filemanager')
+                                        FileManager:showFiles(download_dir)
+                                    end)
+                                    if not ok then
+                                        Notification:error(_('Could not open folder'))
+                                    end
+                                end)
                             end,
                         }))
                     else

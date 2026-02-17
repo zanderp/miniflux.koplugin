@@ -24,6 +24,7 @@ function UseHtmlReader.getMenuItem(settings)
                     keep_menu_open = true,
                     callback = function(touchmenu_instance)
                         settings.use_html_reader = true
+                        settings:save()
                         Notification:info(_('Entries will open in system browser (no download)'))
                         UIManager:scheduleIn(0.5, function()
                             touchmenu_instance:backToUpperMenu()
@@ -35,6 +36,7 @@ function UseHtmlReader.getMenuItem(settings)
                     keep_menu_open = true,
                     callback = function(touchmenu_instance)
                         settings.use_html_reader = false
+                        settings:save()
                         Notification:success(_('Entries will be downloaded then opened'))
                         UIManager:scheduleIn(0.5, function()
                             touchmenu_instance:backToUpperMenu()

@@ -16,6 +16,7 @@ local Notification = require('shared/widgets/notification')
 local Device = require('device')
 local util = require('util')
 local _ = require('gettext')
+local logger = require('logger')
 
 local EntryPaths = require('domains/utils/entry_paths')
 local EntryValidation = require('domains/utils/entry_validation')
@@ -85,12 +86,16 @@ function MinifluxEndOfBook:showCustomEndOfBookDialog()
 end
 
 ---Show end of entry dialog with navigation options
----@param entry_info table Entry information with file_path and entry_id
+---@param entry_info table Entry information: entry_id (required), file_path (optional for local read), from_html_viewer (optional), on_return_to_browser (optional callback when opened from HTML viewer)
 ---@return table|nil Dialog reference for caller management or nil if failed
 function MinifluxEndOfBook:showDialog(entry_info)
-    if not entry_info or not entry_info.file_path or not entry_info.entry_id then
+    if not entry_info or not entry_info.entry_id then
+        logger.dbg('[Miniflux:EndOfBook] showDialog skipped: no entry_info or entry_id')
         return nil
     end
+    logger.dbg('[Miniflux:EndOfBook] showDialog entry_id:', entry_info.entry_id)
+
+    local from_html_viewer = entry_info.from_html_viewer or not entry_info.file_path or entry_info.file_path == ''
 
     if not self.miniflux or not self.miniflux.reader_entry_service then
         return nil
@@ -142,114 +147,131 @@ function MinifluxEndOfBook:showDialog(entry_info)
     -- Declare dialog variable first for proper scoping in callbacks
     ---@type ButtonDialog
     local dialog
+    local row2 = {
+        {
+            text = mark_button_text,
+            callback = function()
+                UIManager:close(dialog)
+                mark_callback()
+            end,
+        },
+        {
+            text = _('★ Toggle bookmark'),
+            callback = function()
+                UIManager:close(dialog)
+                local entry_id = entry_info.entry_id
+                local miniflux = self.miniflux
+                -- Defer toggle so dialog close completes first; run in pcall to avoid crashing the app
+                UIManager:scheduleIn(0, function()
+                    if not EntryValidation.isValidId(entry_id) then
+                        Notification:warning(_('Cannot update bookmark: invalid entry ID'))
+                        return
+                    end
+                    if not miniflux or not miniflux.entries then
+                        Notification:warning(_('Cannot update bookmark'))
+                        return
+                    end
+                    local ok, ret = pcall(function()
+                        local r, e = miniflux.entries:toggleBookmark(entry_id)
+                        return { result = r, err = e }
+                    end)
+                    if not ok then
+                        Notification:warning(_('Failed to update bookmark'))
+                        return
+                    end
+                    local err = type(ret) == 'table' and ret.err or nil
+                    if err then
+                        Notification:warning(err.message or _('Failed to update bookmark'))
+                    else
+                        Notification:success(_('Bookmark updated'))
+                    end
+                end)
+            end,
+        },
+    }
+    if not from_html_viewer then
+        table.insert(row2, 1, {
+            text = _('⚠ Delete local entry'),
+            callback = function()
+                UIManager:close(dialog)
+                if not EntryValidation.isValidId(entry_info.entry_id) then
+                    Notification:warning(_('Cannot delete: invalid entry ID'))
+                    return
+                end
+                local success = EntryPaths.deleteLocalEntry(entry_info.entry_id, { open_folder = false })
+                if success then
+                    local ReaderUI = require('apps/reader/readerui')
+                    if ReaderUI.instance then
+                        ReaderUI.instance:onClose()
+                    end
+                    UIManager:scheduleIn(0.15, function()
+                        if self and self.miniflux then
+                            pcall(function()
+                                self:returnToBrowser()
+                            end)
+                        end
+                    end)
+                end
+            end,
+        })
+    end
     local buttons = {
         {
             {
                 text = _('← Previous'),
                 callback = function()
                     UIManager:close(dialog)
-                    navigateToEntry('previous')
+                    if entry_info.on_before_navigate then
+                        entry_info.on_before_navigate()
+                    end
+                    if self.miniflux then
+                        navigateToEntry('previous')
+                    end
                 end,
             },
             {
                 text = _('Next →'),
                 callback = function()
                     UIManager:close(dialog)
-                    navigateToEntry('next')
-                end,
-            },
-        },
-        {
-            {
-                text = _('⚠ Delete local entry'),
-                callback = function()
-                    UIManager:close(dialog)
-                    -- Inline deletion with validation
-                    if not EntryValidation.isValidId(entry_info.entry_id) then
-                        Notification:warning(_('Cannot delete: invalid entry ID'))
-                        return
+                    if entry_info.on_before_navigate then
+                        entry_info.on_before_navigate()
                     end
-
-                    local success = EntryPaths.deleteLocalEntry(entry_info.entry_id, { open_folder = false })
-                    if success then
-                        local ReaderUI = require('apps/reader/readerui')
-                        if ReaderUI.instance then
-                            ReaderUI.instance:onClose()
-                        end
-                        UIManager:scheduleIn(0.15, function()
-                            self:returnToBrowser()
-                        end)
+                    if self.miniflux then
+                        navigateToEntry('next')
                     end
                 end,
             },
-            {
-                text = mark_button_text,
-                callback = function()
-                    UIManager:close(dialog)
-                    mark_callback()
-                end,
-            },
-            {
-                text = _('★ Toggle bookmark'),
-                callback = function()
-                    UIManager:close(dialog)
-                    local entry_id = entry_info.entry_id
-                    local miniflux = self.miniflux
-                    -- Defer toggle so dialog close completes first; run in pcall to avoid crashing the app
-                    UIManager:scheduleIn(0, function()
-                        if not EntryValidation.isValidId(entry_id) then
-                            Notification:warning(_('Cannot update bookmark: invalid entry ID'))
-                            return
-                        end
-                        if not miniflux or not miniflux.entries then
-                            Notification:warning(_('Cannot update bookmark'))
-                            return
-                        end
-                        local ok, ret = pcall(function()
-                            local r, e = miniflux.entries:toggleBookmark(entry_id)
-                            return { result = r, err = e }
-                        end)
-                        if not ok then
-                            Notification:warning(_('Failed to update bookmark'))
-                            return
-                        end
-                        local err = type(ret) == 'table' and ret.err or nil
-                        if err then
-                            Notification:warning(err.message or _('Failed to update bookmark'))
-                        else
-                            Notification:success(_('Bookmark updated'))
-                        end
-                    end)
-                end,
-            },
         },
-        {
-            {
-                text = _('⌂ Return to Miniflux'),
-                callback = function()
-                    UIManager:close(dialog)
-                    local entry_id = entry_info.entry_id
-                    local auto_delete = self.miniflux.settings.auto_delete_read_on_close
-                        and EntryValidation.isEntryRead(entry_status)
-                    local ReaderUI = require('apps/reader/readerui')
-                    if ReaderUI.instance then
-                        ReaderUI.instance:onClose()
-                    end
-                    UIManager:scheduleIn(0.15, function()
-                        if auto_delete and EntryValidation.isValidId(entry_id) then
-                            EntryPaths.deleteLocalEntry(entry_id, { silent = true })
-                        end
-                        self:returnToBrowser()
-                    end)
-                end,
-            },
-            {
-                text = _('Cancel'),
-                callback = function()
-                    UIManager:close(dialog)
-                end,
-            },
-        },
+        row2,
+        (function()
+            -- ⌂ Return to Miniflux only for HTML reader; normal document viewer has Close (open Miniflux folder) + Cancel.
+            local row3 = {
+                {
+                    text = _('Cancel'),
+                    callback = function()
+                        UIManager:close(dialog)
+                    end,
+                },
+            }
+            if from_html_viewer and entry_info.on_return_to_browser then
+                table.insert(row3, 1, {
+                    text = _('⌂ Return to Miniflux'),
+                    callback = function()
+                        UIManager:close(dialog)
+                        entry_info.on_return_to_browser()
+                    end,
+                })
+            else
+                table.insert(row3, 1, {
+                    text = _('Close'),
+                    callback = function()
+                        UIManager:close(dialog)
+                        EntryPaths.openKoreaderHomeFolder()
+                    end,
+                })
+            end
+            return row3
+        end)(),
     }
 
     -- Create dialog and assign to the pre-declared variable
@@ -297,17 +319,31 @@ end
 
 ---Return to the browser view where the user was before opening this entry.
 ---Populates browser paths so the back button works (see PR #62 review).
+---When browser/plugin were closed for the reader, re-show plugin first and reset browser state so X closes cleanly.
 function MinifluxEndOfBook:returnToBrowser()
+    logger.dbg('[Miniflux:EndOfBook] returnToBrowser')
     if not self.miniflux or not self.miniflux.browser then
+        logger.dbg('[Miniflux:EndOfBook] returnToBrowser: no miniflux or browser')
         return
+    end
+    local was_closed = not UIManager:isWidgetShown(self.miniflux)
+    -- Re-show plugin first if it was closed when entering the reader, so stack is Plugin -> Browser and X closes both.
+    if was_closed then
+        logger.dbg('[Miniflux:EndOfBook] returnToBrowser: re-showing plugin first')
+        UIManager:show(self.miniflux)
+        -- Reset browser state so we don't carry stale paths/overlay from before close (avoids bad state / stuck on X).
+        self.miniflux.browser.paths = {}
+        self.miniflux.browser.current_overlay = nil
     end
 
     local context = self.miniflux:getBrowserContext()
 
     if not context or not context.type then
+        logger.dbg('[Miniflux:EndOfBook] returnToBrowser: no context, opening main')
         self.miniflux.browser:open()
         return
     end
+    logger.dbg('[Miniflux:EndOfBook] returnToBrowser context:', context.type, context.id or context.search or '')
 
     local view_name
     local nav_context

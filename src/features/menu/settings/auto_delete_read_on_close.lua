@@ -24,6 +24,7 @@ function AutoDeleteReadOnClose.getMenuItem(settings)
                     keep_menu_open = true,
                     callback = function(touchmenu_instance)
                         settings.auto_delete_read_on_close = true
+                        settings:save()
                         Notification:success(_('Read entries will be removed from device when you close or leave them'))
                         UIManager:scheduleIn(0.5, function()
                             touchmenu_instance:backToUpperMenu()
@@ -35,6 +36,7 @@ function AutoDeleteReadOnClose.getMenuItem(settings)
                     keep_menu_open = true,
                     callback = function(touchmenu_instance)
                         settings.auto_delete_read_on_close = false
+                        settings:save()
                         Notification:success(_('Read entries will stay on device until you delete them'))
                         UIManager:scheduleIn(0.5, function()
                             touchmenu_instance:backToUpperMenu()
