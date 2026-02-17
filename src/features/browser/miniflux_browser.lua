@@ -323,6 +323,14 @@ function MinifluxBrowser:openItem(entry_data, context)
         'with context:',
         context and context.type or 'global'
     )
+    -- When "Use HTML reader" is ON: open article URL in system/HTML browser (no download)
+    if self.settings.use_html_reader and entry_data and entry_data.url and entry_data.url ~= '' then
+        local Device = require('device')
+        if Device.openLink then
+            Device:openLink(entry_data.url)
+            return
+        end
+    end
     -- Use workflow directly for download-if-needed and open
     local EntryWorkflow = require('features/browser/download/download_entry')
     EntryWorkflow.execute({

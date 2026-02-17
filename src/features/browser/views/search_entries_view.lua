@@ -14,13 +14,29 @@ local SearchEntriesView = {}
 
 ---@alias SearchEntriesViewConfig {entries: Entries, settings: MinifluxSettings, page_state?: number, search: string, onSelectItem: function}
 
----Show entries matching search query
+---Build view data for search (used for both success and error/empty cases so back always works)
+local function buildSearchView(search, entries, subtitle_suffix)
+    local menu_items = EntriesView.buildItems({
+        entries = entries or {},
+        show_feed_names = true,
+        hide_read_entries = false,
+        onSelectItem = function() end,
+    })
+    return {
+        title = _('Search'),
+        items = menu_items,
+        page_state = nil,
+        subtitle = subtitle_suffix or '',
+    }
+end
+
+---Show entries matching search query. Always returns a view so back navigates to main (never nil).
 ---@param config SearchEntriesViewConfig
----@return table|nil View data for browser rendering, or nil on error
+---@return table View data for browser rendering
 function SearchEntriesView.show(config)
     local search = config.search and config.search:match('^%s*(.-)%s*$') or ''
     if search == '' then
-        return nil
+        return buildSearchView(search, {}, _('Enter a search term'))
     end
 
     local result, err = config.entries:getEntries({
@@ -37,7 +53,7 @@ function SearchEntriesView.show(config)
     })
 
     if err or not result then
-        return nil
+        return buildSearchView(search, {}, _('Search failed'))
     end
     local entries = result.entries or {}
 

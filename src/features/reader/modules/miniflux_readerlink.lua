@@ -107,6 +107,22 @@ function MinifluxReaderLink:setupLinkDialogIntegration()
     -- Store reference to self for use in closures
     local service = self
 
+    -- Add "Open in browser" for any link (e.g. original article URL) – opens in system/HTML browser
+    self.reader_link:addToExternalLinkDialog('10_open_in_browser', function(this, link_url)
+        return {
+            text = _('Open in browser'),
+            callback = function()
+                UIManager:close(this.external_link_dialog)
+                if link_url and link_url ~= '' and Device.openLink then
+                    Device:openLink(link_url)
+                end
+            end,
+            show_in_dialog_func = function()
+                return link_url and link_url ~= '' and Device.openLink
+            end,
+        }
+    end)
+
     -- Add image viewer button to external link dialog
     self.reader_link:addToExternalLinkDialog('15_image_viewer', function(this, link_url)
         return {

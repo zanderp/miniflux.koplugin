@@ -385,7 +385,9 @@ function Browser:goForward(nav_config)
     self:navigate(route_config)
 end
 
----Navigate back (pop previous state from paths and route back)
+---Navigate back (pop previous state from paths and route back).
+---Navigation is deferred so the current event handler returns immediately and the UI does not hang
+---when the target view (e.g. main) does synchronous work (e.g. API calls).
 function Browser:goBack()
     -- Exit selection mode before navigating back to prevent crashes
     if self:isCurrentMode(BrowserMode.SELECTION) then
@@ -402,7 +404,10 @@ function Browser:goBack()
         if prev_nav.context then
             route_config.context = prev_nav.context
         end
-        self:navigate(route_config)
+        local self_ref = self
+        UIManager:scheduleIn(0, function()
+            self_ref:navigate(route_config)
+        end)
     end
 end
 
@@ -460,10 +465,13 @@ function Browser:navigate(nav_config)
     )
 end
 
----Close the browser
+---Close the browser. Deferred so the current event handler returns immediately and the UI does not hang.
 function Browser:close()
     logger.info('[Browser] Closing browser')
-    UIManager:close(self)
+    local self_ref = self
+    UIManager:scheduleIn(0, function()
+        UIManager:close(self_ref)
+    end)
 end
 
 -- =============================================================================

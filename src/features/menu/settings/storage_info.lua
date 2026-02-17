@@ -21,21 +21,32 @@ function StorageInfo.getMenuItem()
 end
 
 function StorageInfo.showDialog()
-    local stats = StorageUtils.getStorageStats()
-    local total_str = StorageUtils.formatSize(stats.total_bytes)
-    local image_str = StorageUtils.formatSize(stats.image_bytes)
-    local text = T(
+    local ok, stats = pcall(StorageUtils.getStorageStats)
+    if not ok or not stats then
+        local err_dialog = ButtonDialog:new({
+            title = _('Miniflux storage'),
+            title_align = 'center',
+            buttons = { { { text = _('Close'), callback = function() UIManager:close(err_dialog) end } } },
+        })
+        UIManager:show(err_dialog)
+        return
+    end
+
+    local total_str = StorageUtils.formatSize(stats.total_bytes or 0)
+    local image_str = StorageUtils.formatSize(stats.image_bytes or 0)
+    local body = T(
         _('Downloaded entries: %1\nTotal size: %2\nImages: %3 (%4)'),
-        stats.entry_count,
+        tostring(stats.entry_count or 0),
         total_str,
-        stats.image_count,
+        tostring(stats.image_count or 0),
         image_str
     )
+    -- Title and body in one: ButtonDialog may not render separate text on all platforms
+    local title = _('Miniflux storage') .. '\n\n' .. body
 
     local dialog = ButtonDialog:new({
-        title = _('Miniflux storage'),
+        title = title,
         title_align = 'center',
-        text = text,
         buttons = {
             {
                 {
@@ -46,6 +57,9 @@ function StorageInfo.showDialog()
                 },
             },
         },
+        tap_close_callback = function()
+            UIManager:close(dialog)
+        end,
     })
     UIManager:show(dialog)
 end

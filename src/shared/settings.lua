@@ -68,7 +68,7 @@ local DEFAULTS = {
 ---@field auto_update_last_check number Timestamp of last update check
 ---@field download_dir string Custom download directory path (empty = use default)
 ---@field auto_delete_read_on_close boolean Delete local entry when closing/navigating if read
----@field use_html_reader boolean Open in HTML viewer without downloading (when possible)
+---@field use_html_reader boolean Open article URL in system browser (no download)
 ---@field prefetch_count number Number of entries to prefetch (0 = off)
 local MinifluxSettings = {}
 
