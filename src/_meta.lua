@@ -13,8 +13,8 @@ return {
     name = 'miniflux',
     fullname = _('Miniflux'),
     description = _([[Read RSS entries from your Miniflux server.]]),
-    version = '0.0.10',
-    author = 'Algus Dark',
-    repo_owner = 'AlgusDark',
+    version = '0.0.11',
+    author = 'Alexandru Popa',
+    repo_owner = 'zanderp',
     repo_name = 'miniflux.koplugin',
 }

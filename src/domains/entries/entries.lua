@@ -63,12 +63,20 @@ function Entries:updateEntries(entry_ids, config)
     return self.miniflux.api:updateEntries(entry_ids, config)
 end
 
----Get entries with optional filtering
+---Get entries with optional filtering (supports search and starred; issue #31)
 ---@param options? ApiOptions Query options for filtering and sorting
 ---@param config? table Configuration including optional dialogs
 ---@return MinifluxEntriesResponse|nil result, Error|nil error
 function Entries:getEntries(options, config)
     return self.miniflux.api:getEntries(options, config)
+end
+
+---Toggle entry bookmark (star/unstar)
+---@param entry_id number Entry ID
+---@param config? table Configuration with optional dialogs
+---@return table|nil result, Error|nil error
+function Entries:toggleBookmark(entry_id, config)
+    return self.miniflux.api:toggleEntryBookmark(entry_id, config)
 end
 
 ---Test connection to Miniflux server (useful for settings)

@@ -1,7 +1,9 @@
 local DataStorage = require('datastorage')
+local LuaSettings = require('luasettings')
 local lfs = require('libs/libkoreader-lfs')
 local ReaderUI = require('apps/reader/readerui')
 local FileManager = require('apps/filemanager/filemanager')
+local Files = require('shared/files')
 local _ = require('gettext')
 local logger = require('logger')
 
@@ -9,9 +11,15 @@ local logger = require('logger')
 -- Handles directory structures, file paths, and basic file operations
 local EntryPaths = {}
 
----Get the base download directory for all entries
----@return string Download directory path
+---Get the base download directory for all entries.
+---Uses custom path from settings if set (issue #57), otherwise default <data>/miniflux/.
+---@return string Download directory path (with trailing slash)
 function EntryPaths.getDownloadDir()
+    local settings = LuaSettings:open(DataStorage:getSettingsDir() .. '/miniflux.lua')
+    local custom = settings:readSetting('download_dir', '')
+    if custom and type(custom) == 'string' and custom:match('%S') then
+        return custom:gsub('/+$', '') .. '/'
+    end
     return ('%s/%s/'):format(DataStorage:getFullDataDir(), 'miniflux')
 end
 
@@ -29,25 +37,33 @@ function EntryPaths.getEntryHtmlPath(entry_id)
     return EntryPaths.getEntryDirectory(entry_id) .. 'entry.html'
 end
 
----Check if file path is a miniflux entry
+---Check if file path is a miniflux entry (under current download dir, ends with /entry.html)
 ---@param file_path string File path to check
 ---@return boolean true if miniflux entry, false otherwise
 function EntryPaths.isMinifluxEntry(file_path)
     if not file_path then
         return false
     end
-    return file_path:match('/miniflux/') and file_path:match('%.html$')
+    local base = EntryPaths.getDownloadDir()
+    if file_path:sub(1, #base) ~= base then
+        return false
+    end
+    return file_path:match('/(%d+)/entry%.html$') ~= nil
 end
 
 ---Extract entry ID from miniflux file path
 ---@param file_path string File path to check
 ---@return number|nil entry_id Entry ID or nil if not a miniflux entry
 function EntryPaths.extractEntryIdFromPath(file_path)
-    if not EntryPaths.isMinifluxEntry(file_path) then
+    if not file_path then
         return nil
     end
-
-    local entry_id_str = file_path:match('/miniflux/(%d+)/')
+    local base = EntryPaths.getDownloadDir()
+    if file_path:sub(1, #base) ~= base then
+        return nil
+    end
+    local rest = file_path:sub(#base + 1)
+    local entry_id_str = rest:match('^(%d+)/') or rest:match('^(%d+)/entry%.html$')
     return entry_id_str and tonumber(entry_id_str)
 end
 
@@ -61,8 +77,10 @@ end
 
 ---Delete a local entry and its files
 ---@param entry_id number Entry ID
+---@param opts? {silent?: boolean, open_folder?: boolean} Optional: silent = true skips notification and folder; open_folder = false skips only opening folder
 ---@return boolean success True if deletion succeeded
-function EntryPaths.deleteLocalEntry(entry_id)
+function EntryPaths.deleteLocalEntry(entry_id, opts)
+    opts = opts or {}
     local _ = require('gettext')
     local Notification = require('shared/widgets/notification')
     local FFIUtil = require('ffi/util')
@@ -71,6 +89,8 @@ function EntryPaths.deleteLocalEntry(entry_id)
     local ok = FFIUtil.purgeDir(entry_dir)
 
     if ok then
+        -- Remove entry directory if empty (including empty hidden subdirs; closes #60, PR #63)
+        Files.removeEmptyDirectory(entry_dir)
         -- Invalidate download cache for this entry
         local MinifluxBrowser = require('features/browser/miniflux_browser')
         MinifluxBrowser.deleteEntryInfoCache(entry_id)
@@ -78,14 +98,17 @@ function EntryPaths.deleteLocalEntry(entry_id)
             '[Miniflux:EntryPaths] Invalidated download cache after deleting entry',
             entry_id
         )
-        Notification:success(_('Local entry deleted successfully'))
-
-        -- Open Miniflux folder
-        EntryPaths.openMinifluxFolder()
-
+        if not opts.silent then
+            Notification:success(_('Local entry deleted successfully'))
+        end
+        if opts.open_folder ~= false and not opts.silent then
+            EntryPaths.openMinifluxFolder()
+        end
         return true
     else
-        Notification:error(_('Failed to delete local entry: ') .. tostring(ok))
+        if not opts.silent then
+            Notification:error(_('Failed to delete local entry: ') .. tostring(ok))
+        end
         return false
     end
 end

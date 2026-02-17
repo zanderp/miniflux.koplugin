@@ -81,6 +81,13 @@ end
 function Miniflux:init()
     logger.info('[Miniflux:Main] Initializing plugin')
 
+    self.settings = MinifluxSettings:new()
+    logger.info('[Miniflux:Main] Settings initialized', MinifluxSettings)
+
+    -- Use configured download directory (issue #57: custom download location)
+    local EntryPaths = require('domains/utils/entry_paths')
+    self.download_dir = EntryPaths.getDownloadDir()
+
     -- Create the directory if it doesn't exist
     if not lfs.attributes(self.download_dir, 'mode') then
         local success = lfs.mkdir(self.download_dir)
@@ -89,9 +96,6 @@ function Miniflux:init()
             return
         end
     end
-
-    self.settings = MinifluxSettings:new()
-    logger.info('[Miniflux:Main] Settings initialized', MinifluxSettings)
 
     -- Create shared HTTP cache instance after settings
     self.http_cache = HTTPCacheAdapter:new({

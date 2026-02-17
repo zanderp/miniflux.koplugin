@@ -13,7 +13,7 @@ local EntryCollections = require('domains/utils/entry_collections')
 
 local MainView = {}
 
----@alias MainViewConfig {miniflux: Miniflux, settings: MinifluxSettings, onSelectUnread: function, onSelectFeeds: function, onSelectCategories: function, onSelectLocal: function}
+---@alias MainViewConfig {miniflux: Miniflux, settings: MinifluxSettings, onSelectUnread: function, onSelectFeeds: function, onSelectCategories: function, onSelectLocal: function, onSelectStarred: function, onSelectSearch: function}
 
 ---Complete main view component (React-style) - returns view data for browser rendering
 ---@param config MainViewConfig
@@ -48,6 +48,8 @@ function MainView.show(config)
             onSelectFeeds = config.onSelectFeeds,
             onSelectCategories = config.onSelectCategories,
             onSelectLocal = config.onSelectLocal,
+            onSelectStarred = config.onSelectStarred,
+            onSelectSearch = config.onSelectSearch,
         },
     })
 
@@ -100,15 +102,25 @@ function MainView.loadData(miniflux)
 
     loading_notification:close()
 
+    -- Starred count (bookmarked entries)
+    local starred_result, _starred_err = miniflux.entries:getEntries({
+        starred = true,
+        limit = 1,
+        order = miniflux.settings.order,
+        direction = miniflux.settings.direction,
+    })
+    local starred_count = (starred_result and starred_result.total) or 0
+
     return {
         unread_count = unread_count or 0,
         feeds_count = feeds_count or 0,
         categories_count = categories_count or 0,
+        starred_count = starred_count,
     }
 end
 
 ---Build main menu items (internal helper)
----@param config {counts?: table, local_count: number, is_online: boolean, callbacks: {onSelectUnread: function, onSelectFeeds: function, onSelectCategories: function, onSelectLocal: function}}
+---@param config {counts?: table, local_count: number, is_online: boolean, callbacks: table}
 ---@return table[] Menu items for main screen
 function MainView.buildItems(config)
     local counts = config.counts
@@ -126,6 +138,11 @@ function MainView.buildItems(config)
             callback = callbacks.onSelectUnread,
         })
         table.insert(items, {
+            text = _('Starred'),
+            mandatory = tostring(counts.starred_count or 0),
+            callback = callbacks.onSelectStarred,
+        })
+        table.insert(items, {
             text = _('Feeds'),
             mandatory = tostring(counts.feeds_count or 0),
             callback = callbacks.onSelectFeeds,
@@ -134,6 +151,11 @@ function MainView.buildItems(config)
             text = _('Categories'),
             mandatory = tostring(counts.categories_count or 0),
             callback = callbacks.onSelectCategories,
+        })
+        table.insert(items, {
+            text = _('Search'),
+            mandatory = '',
+            callback = callbacks.onSelectSearch,
         })
     end
 

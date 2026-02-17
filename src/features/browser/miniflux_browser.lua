@@ -1,5 +1,7 @@
 local Browser = require('shared/widgets/browser')
 local BrowserMode = Browser.BrowserMode
+local InputDialog = require('ui/widget/inputdialog')
+local UIManager = require('ui/uimanager')
 
 local _ = require('gettext')
 local T = require('ffi/util').template
@@ -50,9 +52,8 @@ function MinifluxBrowser:populateEntriesCache()
     logger.dbg('[Miniflux:BrowserEntriesInfoCache] Populating entries cache in background')
     local lfs = require('libs/libkoreader-lfs')
     local DocSettings = require('docsettings')
-    local DataStorage = require('datastorage')
 
-    local miniflux_path = ('%s/%s/'):format(DataStorage:getFullDataDir(), 'miniflux')
+    local miniflux_path = self.miniflux.download_dir
 
     for entry in lfs.dir(miniflux_path) do
         if entry ~= '.' and entry ~= '..' then
@@ -110,6 +111,11 @@ end
 function MinifluxBrowser.deleteEntryInfoCache(entry_id)
     logger.dbg('[Miniflux:BrowserEntriesInfoCache] Deleting entry info cache for entry:', entry_id)
     MinifluxBrowser.entries_info_cache[entry_id] = nil
+end
+
+---Clear entire entries info cache (e.g. after "clear all downloads")
+function MinifluxBrowser.clearEntriesInfoCache()
+    MinifluxBrowser.entries_info_cache = {}
 end
 
 ---Get cached entry metadata or load from DocSettings as fallback
@@ -338,6 +344,9 @@ function MinifluxBrowser:getRouteHandlers(nav_config)
                 onSelectUnread = function()
                     self:goForward({ from = 'main', to = 'unread_entries' })
                 end,
+                onSelectStarred = function()
+                    self:goForward({ from = 'main', to = 'starred_entries' })
+                end,
                 onSelectFeeds = function()
                     self:goForward({ from = 'main', to = 'feeds' })
                 end,
@@ -346,6 +355,41 @@ function MinifluxBrowser:getRouteHandlers(nav_config)
                 end,
                 onSelectLocal = function()
                     self:goForward({ from = 'main', to = 'local_entries' })
+                end,
+                onSelectSearch = function()
+                    local search_dialog
+                    search_dialog = InputDialog:new({
+                        title = _('Search entries'),
+                        input = '',
+                        input_hint = _('Enter search term'),
+                        buttons = {
+                            {
+                                {
+                                    text = _('Cancel'),
+                                    callback = function()
+                                        UIManager:close(search_dialog)
+                                    end,
+                                },
+                                {
+                                    text = _('Search'),
+                                    is_enter_default = true,
+                                    callback = function()
+                                        local q = search_dialog:getInputText()
+                                        UIManager:close(search_dialog)
+                                        if q and q:match('%S') then
+                                            self:goForward({
+                                                from = 'main',
+                                                to = 'search_entries',
+                                                context = { search = q },
+                                            })
+                                        end
+                                    end,
+                                },
+                            },
+                        },
+                    })
+                    UIManager:show(search_dialog)
+                    search_dialog:onShowKeyboard()
                 end,
             })
         end,
@@ -419,8 +463,34 @@ function MinifluxBrowser:getRouteHandlers(nav_config)
                 page_state = nav_config.page_state,
                 onSelectItem = function(entry_data)
                     local context = {
-                        type = 'unread', -- Specific context for unread navigation
+                        type = 'unread',
                     }
+                    self:openItem(entry_data, context)
+                end,
+            })
+        end,
+        starred_entries = function()
+            local StarredEntriesView = require('features/browser/views/starred_entries_view')
+            return StarredEntriesView.show({
+                entries = self.miniflux.entries,
+                settings = self.settings,
+                page_state = nav_config.page_state,
+                onSelectItem = function(entry_data)
+                    local context = { type = 'starred' }
+                    self:openItem(entry_data, context)
+                end,
+            })
+        end,
+        search_entries = function()
+            local SearchEntriesView = require('features/browser/views/search_entries_view')
+            local search = (nav_config.context and nav_config.context.search) or ''
+            return SearchEntriesView.show({
+                entries = self.miniflux.entries,
+                settings = self.settings,
+                page_state = nav_config.page_state,
+                search = search,
+                onSelectItem = function(entry_data)
+                    local context = { type = 'search', search = search }
                     self:openItem(entry_data, context)
                 end,
             })

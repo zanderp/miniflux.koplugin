@@ -170,12 +170,15 @@ function MinifluxEndOfBook:showDialog(entry_info)
                         return
                     end
 
-                    local success = EntryPaths.deleteLocalEntry(entry_info.entry_id)
+                    local success = EntryPaths.deleteLocalEntry(entry_info.entry_id, { open_folder = false })
                     if success then
                         local ReaderUI = require('apps/reader/readerui')
                         if ReaderUI.instance then
                             ReaderUI.instance:onClose()
                         end
+                        UIManager:scheduleIn(0.15, function()
+                            self:returnToBrowser()
+                        end)
                     end
                 end,
             },
@@ -186,13 +189,41 @@ function MinifluxEndOfBook:showDialog(entry_info)
                     mark_callback()
                 end,
             },
+            {
+                text = _('★ Toggle bookmark'),
+                callback = function()
+                    UIManager:close(dialog)
+                    if not EntryValidation.isValidId(entry_info.entry_id) then
+                        Notification:warning(_('Cannot update bookmark: invalid entry ID'))
+                        return
+                    end
+                    local _, err = self.miniflux.entries:toggleBookmark(entry_info.entry_id)
+                    if err then
+                        Notification:warning(err.message or _('Failed to update bookmark'))
+                    else
+                        Notification:success(_('Bookmark updated'))
+                    end
+                end,
+            },
         },
         {
             {
-                text = _('⌂ Miniflux folder'),
+                text = _('⌂ Return to Miniflux'),
                 callback = function()
                     UIManager:close(dialog)
-                    EntryPaths.openMinifluxFolder()
+                    local entry_id = entry_info.entry_id
+                    local auto_delete = self.miniflux.settings.auto_delete_read_on_close
+                        and EntryValidation.isEntryRead(entry_status)
+                    local ReaderUI = require('apps/reader/readerui')
+                    if ReaderUI.instance then
+                        ReaderUI.instance:onClose()
+                    end
+                    UIManager:scheduleIn(0.15, function()
+                        if auto_delete and EntryValidation.isValidId(entry_id) then
+                            EntryPaths.deleteLocalEntry(entry_id, { silent = true })
+                        end
+                        self:returnToBrowser()
+                    end)
                 end,
             },
             {
@@ -245,6 +276,58 @@ function MinifluxEndOfBook:showDialog(entry_info)
     -- Show dialog and return reference for caller management
     UIManager:show(dialog)
     return dialog
+end
+
+---Return to the browser view where the user was before opening this entry.
+---Populates browser paths so the back button works (see PR #62 review).
+function MinifluxEndOfBook:returnToBrowser()
+    if not self.miniflux or not self.miniflux.browser then
+        return
+    end
+
+    local context = self.miniflux:getBrowserContext()
+
+    if not context or not context.type then
+        self.miniflux.browser:open()
+        return
+    end
+
+    local view_name
+    local nav_context
+    local nav_state
+
+    if context.type == 'feed' then
+        table.insert(self.miniflux.browser.paths, { from = 'main', to = 'feeds' })
+        nav_state = { from = 'feeds', to = 'feed_entries' }
+        view_name = 'feed_entries'
+        nav_context = { feed_id = context.id }
+    elseif context.type == 'category' then
+        table.insert(self.miniflux.browser.paths, { from = 'main', to = 'categories' })
+        nav_state = { from = 'categories', to = 'category_entries' }
+        view_name = 'category_entries'
+        nav_context = { category_id = context.id }
+    elseif context.type == 'unread' then
+        nav_state = { from = 'main', to = 'unread_entries' }
+        view_name = 'unread_entries'
+    elseif context.type == 'starred' then
+        nav_state = { from = 'main', to = 'starred_entries' }
+        view_name = 'starred_entries'
+    elseif context.type == 'search' and context.search then
+        nav_state = { from = 'main', to = 'search_entries', context = { search = context.search } }
+        view_name = 'search_entries'
+        nav_context = { search = context.search }
+    elseif context.type == 'local' then
+        nav_state = { from = 'main', to = 'local_entries' }
+        view_name = 'local_entries'
+    else
+        view_name = 'main'
+    end
+
+    self.miniflux.browser:navigate({
+        view_name = view_name,
+        context = nav_context,
+        pending_nav_state = nav_state,
+    })
 end
 
 ---Cleanup method - revert the wrapped method

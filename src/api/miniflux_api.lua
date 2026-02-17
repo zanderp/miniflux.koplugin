@@ -21,6 +21,7 @@ local EventListener = require('ui/widget/eventlistener')
 ---@field url? string Entry URL
 ---@field published_at? string Publication timestamp
 ---@field status string Entry status: "read", "unread", "removed"
+---@field starred? boolean Whether entry is bookmarked/starred
 ---@field feed MinifluxEntryFeed Feed information
 
 ---@class MinifluxFeed
@@ -55,6 +56,8 @@ local EventListener = require('ui/widget/eventlistener')
 ---@field feed_id? number Filter by feed ID
 ---@field published_before? number Filter entries published before this timestamp
 ---@field published_after? number Filter entries published after this timestamp
+---@field search? string Search query (issue #31; Miniflux 2.0.10+)
+---@field starred? boolean Filter by starred/bookmarked (Miniflux 2.0.9+)
 
 ---@class APIBody
 ---@field status? EntryStatus Entry status to update
@@ -157,6 +160,16 @@ function MinifluxAPI:buildEntriesUrl(options)
         table.insert(query_parts, 'category_id=' .. tostring(options.category_id))
     end
 
+    if options.search and options.search ~= '' then
+        table.insert(query_parts, 'search=' .. tostring(options.search))
+    end
+
+    if options.starred == true then
+        table.insert(query_parts, 'starred=true')
+    elseif options.starred == false then
+        table.insert(query_parts, 'starred=false')
+    end
+
     if #query_parts > 0 then
         return base_url .. '?' .. table.concat(query_parts, '&')
     end
@@ -172,6 +185,18 @@ function MinifluxAPI:getEntries(options, config)
     config = config or {}
     return self.api_client:get('/entries', {
         query = options,
+        dialogs = config.dialogs,
+    })
+end
+
+---Toggle entry bookmark (star/unstar). PUT /v1/entries/:id/bookmark
+---@param entry_id number Entry ID
+---@param config? table Configuration with optional dialogs
+---@return table|nil result, Error|nil error
+function MinifluxAPI:toggleEntryBookmark(entry_id, config)
+    config = config or {}
+    local endpoint = '/entries/' .. tostring(entry_id) .. '/bookmark'
+    return self.api_client:put(endpoint, {
         dialogs = config.dialogs,
     })
 end

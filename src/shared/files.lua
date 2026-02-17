@@ -53,4 +53,42 @@ function Files.createDirectory(dir_path)
     return true, nil
 end
 
+---Remove a directory only if it is empty (including after removing any empty
+---subdirectories). Handles hidden subdirectories so that e.g. a cache dir
+---containing only an empty .hidden/ subfolder is still removed (closes #60, PR #63).
+---@param dir_path string Directory path (with or without trailing slash)
+---@return boolean removed True if the directory was removed, false if it had content
+function Files.removeEmptyDirectory(dir_path)
+    local mode = lfs.attributes(dir_path, 'mode')
+    if mode ~= 'directory' then
+        return false
+    end
+
+    -- Normalize: ensure trailing slash for consistent path joins
+    local path = dir_path:match('^(.*)/$') and dir_path or (dir_path .. '/')
+
+    for name in lfs.dir(path) do
+        if name ~= '.' and name ~= '..' then
+            local full = path .. name
+            local sub_mode = lfs.attributes(full, 'mode')
+            if sub_mode == 'directory' then
+                -- Recurse so empty (including hidden) subdirs are removed first
+                Files.removeEmptyDirectory(full)
+                -- If subdir still exists it had content; do not remove parent
+                if lfs.attributes(full, 'mode') then
+                    return false
+                end
+            else
+                -- File or other: directory is not empty
+                return false
+            end
+        end
+    end
+
+    -- All entries were subdirs and have been removed; directory is now empty
+    local normalized = path:gsub('/$', '')
+    lfs.rmdir(normalized)
+    return true
+end
+
 return Files

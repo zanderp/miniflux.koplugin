@@ -18,9 +18,26 @@ local PUBLISHED_BEFORE = 'published_before'
 local MSG_FINDING_PREVIOUS = 'Finding previous entry...'
 local MSG_FINDING_NEXT = 'Finding next entry...'
 
+---Parse ISO-8601 timestamp to Unix seconds (UTC).
+---Accepts offset form (e.g. 2025-09-21T16:43:45+00:00) and Z suffix (e.g. 2025-09-21T16:43:45Z).
+---@param iso_string string ISO-8601 datetime string
+---@return number|nil unix_secs Unix timestamp, or nil on parse error
+---@return Error|nil error Error if format invalid
 function iso8601_to_unix(iso_string)
+    if not iso_string or type(iso_string) ~= 'string' then
+        return nil, Error.new(_('Invalid ISO-8601 timestamp format'))
+    end
+
     local Y, M, D, h, m, sec, sign, tzh, tzm =
-        iso_string:match('(%d+)%-(%d+)%-(%d+)T' .. '(%d+):(%d+):(%d+)' .. '([%+%-])(%d%d):(%d%d)$')
+        iso_string:match('^(%d+)%-(%d+)%-(%d+)T(%d+):(%d+):(%d+)%.?%d*([%+%-])(%d%d):(%d%d)$')
+
+    if not Y then
+        -- Try Z (UTC) suffix as used by Miniflux API (issue #58)
+        Y, M, D, h, m, sec = iso_string:match('^(%d+)%-(%d+)%-(%d+)T(%d+):(%d+):(%d+)%.?%d*[Zz]$')
+        if Y then
+            sign, tzh, tzm = '+', 0, 0
+        end
+    end
 
     if not Y then
         return nil, Error.new(_('Invalid ISO-8601 timestamp format'))
@@ -341,27 +358,20 @@ function Navigation.tryLocalFileFirst(opts)
     local entry_data = opts.entry_data
     local context = opts.context
 
-    local entry_id = tostring(entry_data.id)
-    local miniflux_dir = entry_info.file_path:match('(.*)/miniflux/')
+    local html_file = EntryPaths.getEntryHtmlPath(entry_data.id)
 
-    if miniflux_dir then
-        local entry_dir = miniflux_dir .. '/miniflux/' .. entry_id .. '/'
-        local html_file = entry_dir .. 'entry.html'
+    -- Try cache first for download status, fallback to filesystem check
+    local MinifluxBrowser = require('features/browser/miniflux_browser')
+    local is_downloaded = MinifluxBrowser.getEntryInfoCache(entry_data.id) ~= nil
 
-        -- Try cache first for download status, fallback to filesystem check
-        local MinifluxBrowser = require('features/browser/miniflux_browser')
-        local is_downloaded = MinifluxBrowser.getEntryInfoCache(entry_data.id) ~= nil
+    if not is_downloaded then
+        is_downloaded = lfs.attributes(html_file, 'mode') == 'file'
+    end
 
-        -- Fallback to filesystem check if cache miss
-        if not is_downloaded then
-            is_downloaded = lfs.attributes(html_file, 'mode') == 'file'
-        end
-
-        if is_downloaded then
-            local EntryReader = require('features/reader/services/open_entry')
-            EntryReader.openEntry(html_file, { context = context })
-            return true
-        end
+    if is_downloaded then
+        local EntryReader = require('features/reader/services/open_entry')
+        EntryReader.openEntry(html_file, { context = context })
+        return true
     end
 
     return false

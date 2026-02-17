@@ -1,147 +1,113 @@
 # Miniflux Plugin for KOReader
 
-A KOReader plugin allows you to read RSS entries online/offline on your e-reader device.
+A KOReader plugin that lets you read RSS entries from a [Miniflux](https://miniflux.app/) server on your e-reader, online or offline.
 
 ## Features
 
-Browse your Miniflux server content directly from KOReader:
-
-- **Online/Offline Reading**: Browse feeds, categories, and entries online or offline. You can download entries individually or in batch.
-- **Context-Aware Navigation**: Navigate between entries with next/previous actions after finishing reading an entry.
-- **Status Synchronization**: Mark entries as read/unread. Don't worry if you aren't online, the system will keep an eye on it and you can sync it later or the system will remind you when you go online again.
-- **E-ink Optimized**: Efficient image downloading and display for e-readers. You can proxy the images to be transformed for e-ink optimization so you can resize them to fit your reader.
+- **Browse**: Feeds, categories, unread, **starred** (bookmarks), and **search** entries from your Miniflux server.
+- **Read**: Download entries (with optional images) for offline reading, or use the **HTML reader** setting to open in-app without saving (when enabled).
+- **Navigate**: Next/previous entry from the end-of-entry dialog, with **return to Miniflux** that restores your previous view (feed/category/unread/starred/search/local).
+- **Status & bookmarks**: Mark read/unread; **star/unstar** entries (Miniflux bookmark API). Sync runs when online.
+- **Storage**: Custom **download location** (pick or create a folder). **Delete** single or selected entries. **Clear all** downloaded entries. **Auto-delete read on close** option to remove local copy when you leave a read entry.
+- **E-ink**: Optional image proxy for e-ink-friendly scaling.
 
 ## Installation
 
-1. Download the [latest release from this repository](https://github.com/AlgusDark/miniflux.koplugin/releases/latest)
-2. Unzip and copy the **miniflux.koplugin** folder into KOReader's plugin folder
-3. Activate the plugin
+1. Download the [latest release](https://github.com/AlgusDark/miniflux.koplugin/releases/latest).
+2. Unzip and copy the **miniflux.koplugin** folder into KOReader’s plugin directory.
+3. Enable the plugin in KOReader.
 
 ## Usage
 
-1. **Setup**: Configure your Miniflux server URL and credentials in the settings
-2. **Browse**: Access feeds, categories, and entries from the "read entries" menu
-3. **Read**: Select an entry and it will start downloading it. The entry will be opened after successfully downloaded.
-4. **Download**: Tap hold an entry to enter into selection mode and batch download entries.
-5. **Sync**: Status changes sync automatically with your Miniflux server. If in offline mode, it will queue the status for the next time you are online.
+1. **Settings** (Miniflux → Settings): Set server URL and API token. Optionally set download location, entries limit, sort order, mark-as-read on open, auto-delete read on close, HTML reader, and clear all downloads.
+2. **Read entries**: Open “Read entries” to see Unread, Starred, Feeds, Categories, Search, and Local (downloaded).
+3. **Search** (issue [#31](https://github.com/AlgusDark/miniflux.koplugin/issues/31)): Use “Search” from the main list, enter a term, and open results from the Miniflux API.
+4. **Starred**: Open “Starred” to see bookmarked entries. Use “★ Toggle bookmark” in the end-of-entry dialog to star/unstar.
+5. **Download**: Tap an entry to download and open it. Long-press to enter selection mode and batch download.
+6. **Return**: From the end-of-entry dialog, “Return to Miniflux” closes the reader and returns to the same list you came from (with a working back button).
+7. **Storage** (Settings): **Storage info** shows entry count, total size, image count/size. **Delete by date range** (1 week / 1 month / 3 months / 6 months), **Delete all images (keep text)**, **Image recovery** (re-download missing images).
+8. **Prefetch** (Settings → Prefetch next entries): Set count (0–5), then “From Unread” or “From Starred” to download the next N undownloaded entries.
 
 ## Development Status
 
 ### ✅ Core Features
 
 - [x] **Feed and Category Browsing**
-  - [x] List all feeds and categories from Miniflux server
-  - [x] Navigate feed and category organization
+  - [x] List feeds and categories from Miniflux
+  - [x] Navigate by feed/category
 - [x] **Entry Management**
-  - [x] Browse entries by feed, category, or unreads
-  - [x] Download entries with text and images for offline reading
-  - [x] Context-aware navigation (next/previous within current view)
-- [x] **Status Management**
-  - [x] Mark entries as read/unread without deleting local files
-  - [x] Auto-mark as read when opening entry
+  - [x] Browse by feed, category, unread, **starred**, and **search**
+  - [x] Download entries (text + optional images) for offline reading
+  - [x] Context-aware next/previous and return to browser
+- [x] **Status & Bookmarks**
+  - [x] Mark entries read/unread
+  - [x] **Star/unstar entries** (PUT /v1/entries/:id/bookmark)
+  - [x] Auto-mark as read when opening (optional)
   - [x] Batch mark as read when offline
-- [x] **Offline Support**
+- [x] **Offline**
   - [x] Full offline reading of downloaded entries
-  - [x] Local file management and organization
+  - [x] Local file management and custom download location
 
 ### 🚧 Storage Management
 
 - [x] **Bulk Entry Deletion**
   - [x] Delete selected entries
-  - [ ] Delete by date range (1 week, 1 month, 3 months, 6 months)
-  - [ ] Storage space reporting and cleanup
-- [ ] **Selective Image Management**
-  - [ ] Delete all images while preserving entry text
-  - [ ] Image storage statistics and usage breakdown
+  - [x] **Clear all downloaded entries** (Settings)
+  - [x] **Delete by date range** (1 week, 1 month, 3 months, 6 months)
+  - [x] **Storage info** (entry count, total size, image count/size)
+- [x] **Selective Image Management**
+  - [x] **Delete all images** while keeping entry text (Settings)
+  - [x] **Image storage statistics** (in Storage info)
 
 ### 🔄 Background Operations
 
-- [ ] **Intelligent Prefetching**
-  - [ ] Configurable prefetch count (download N entries ahead)
-- [ ] **Image Recovery**
-  - [ ] Selective re-download of missing images only
+- [x] **Prefetching**
+  - [x] Configurable prefetch count (0, 1, 2, 3, 5); “Prefetch from Unread” / “Prefetch from Starred”
+- [x] **Image Recovery**
+  - [x] Re-download missing images for all downloaded entries (Settings)
 
 ### 📊 Enhanced Reading Experience
 
-- [ ] **Search and Organization**
-  - [ ] Full-text search
-  - [ ] Starred entries
+- [x] **Search and Organization**
+  - [x] **Full-text search** (Miniflux API `search` query; issue #31)
+  - [x] **Starred entries** list and toggle bookmark
+- [x] **Reading options**
+  - [x] **Auto-delete read on close** (optional)
+  - [x] **Use HTML reader** setting (experimental; download vs in-app HTML)
 
 ## Technical Details
 
-### Architecture
-
-- **Modular Design**: Separate services for API, entries, navigation, and storage
-- **Error Handling**: Comprehensive error management with user-friendly messages
-- **Offline-First**: Graceful degradation when server is unavailable
-- **E-ink Optimized**: Efficient image processing and display for e-readers
+- **API**: Uses Miniflux REST API (entries, feeds, categories, bookmark toggle, search).
+- **Modular layout**: API layer, domains (entries, feeds, categories), browser UI, reader integration.
+- **Offline-first**: Works without network for downloaded entries; status and bookmark changes sync when online.
 
 ## Development
 
-### Nix Development Environment (Recommended)
-
-This project provides a complete Nix flake for reproducible development:
+### Nix (recommended)
 
 ```bash
-# With direnv (automatic)
-direnv allow
-
-# Manual activation
-nix develop
-
-# Available tools: lua, selene, stylua, task
+direnv allow   # or: nix develop
+# Tools: lua, selene, stylua, task
 ```
 
-### Manual Setup
-
-If not using Nix, install these tools manually:
+### Manual
 
 ```bash
-# Install tools
 cargo install stylua selene
 ```
 
-### Code Quality Tools
-
-- **StyLua**: Code formatter
-- **Selene**: Static analysis and linting
-- **LuaLS**: Type checking with LuaCATS annotations
-
-### Quick Commands
+### Commands
 
 ```bash
-# Check code quality
-task check
-
-# Auto-fix formatting
-task fmt-fix
+task check     # Lint and check
+task fmt-fix   # Format with Stylua
+task build     # Build plugin for distribution
 ```
 
-### Development Setup with KOReader
+### Testing with KOReader
 
-For development testing, create a symlink to the built plugin:
-
-#### macOS
-
-```bash
-# Build the plugin first
-task build
-
-# Create symlink to KOReader plugins directory
-ln -s /path/to/miniflux.koplugin/dist/miniflux.koplugin ~/.config/koreader/plugins/miniflux.koplugin
-
-# Run KOReader with debug logging
-/System/Volumes/Data/Applications/KOReader.app/Contents/MacOS/koreader -d
-
-# Filter logs for Miniflux-specific messages
-/System/Volumes/Data/Applications/KOReader.app/Contents/MacOS/koreader -d 2>&1 | grep -E "Miniflux"
-```
+After `task build`, symlink `dist/miniflux.koplugin` into KOReader’s plugins directory and run KOReader with `-d` for debug logs; filter with `grep -E "Miniflux"` if needed.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to:
-
-- Report bugs and suggest features
-- Submit pull requests for improvements
-- Help with testing on different devices
-- Contribute to documentation
+Contributions are welcome: bug reports, feature ideas, pull requests, and documentation improvements.

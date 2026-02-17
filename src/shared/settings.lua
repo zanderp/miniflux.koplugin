@@ -28,6 +28,18 @@ local DEFAULTS = {
     auto_update_check_frequency = 'weekly', -- 'daily', 'weekly', 'monthly', 'manual'
     auto_update_include_beta = false,
     auto_update_last_check = 0, -- timestamp of last check
+
+    -- Download location (empty = use default: <data>/miniflux)
+    download_dir = '',
+
+    -- Auto-delete local copy when navigating away or closing a read entry
+    auto_delete_read_on_close = false,
+
+    -- When true, open entries in HTML reader (no download); when false, download then open file
+    use_html_reader = false,
+
+    -- Prefetch: how many entries ahead to download when using "Prefetch next" (0 = disabled)
+    prefetch_count = 0,
 }
 
 -- **Miniflux Settings** - Settings management with idiomatic property access
@@ -54,6 +66,10 @@ local DEFAULTS = {
 ---@field auto_update_check_frequency "daily"|"weekly"|"monthly"|"manual" How often to check for updates
 ---@field auto_update_include_beta boolean Whether to include beta releases in update checks
 ---@field auto_update_last_check number Timestamp of last update check
+---@field download_dir string Custom download directory path (empty = use default)
+---@field auto_delete_read_on_close boolean Delete local entry when closing/navigating if read
+---@field use_html_reader boolean Open in HTML viewer without downloading (when possible)
+---@field prefetch_count number Number of entries to prefetch (0 = off)
 local MinifluxSettings = {}
 
 ---@enum MinifluxSettingsKeys
@@ -74,6 +90,10 @@ MinifluxSettings.Key = {
     HIDE_READ_ENTRIES = 'hide_read_entries',
     INCLUDE_IMAGES = 'include_images',
     MARK_AS_READ_ON_OPEN = 'mark_as_read_on_open',
+    DOWNLOAD_DIR = 'download_dir',
+    AUTO_DELETE_READ_ON_CLOSE = 'auto_delete_read_on_close',
+    USE_HTML_READER = 'use_html_reader',
+    PREFETCH_COUNT = 'prefetch_count',
 }
 
 ---Create a new MinifluxSettings instance

@@ -141,6 +141,11 @@ function EntriesView.buildSingleItem(entry, config)
         status_indicator = is_read and '○ ' or '● ' -- Not downloaded: ○=read, ●=unread
     end
 
+    -- Starred/bookmarked indicator
+    if entry.starred then
+        status_indicator = status_indicator .. '★ '
+    end
+
     local display_text = status_indicator .. entry_title
 
     if config.show_feed_names and entry.feed and entry.feed.title then
