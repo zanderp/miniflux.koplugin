@@ -323,13 +323,20 @@ function MinifluxBrowser:openItem(entry_data, context)
         'with context:',
         context and context.type or 'global'
     )
-    -- When "Use HTML reader" is ON: open article URL in system/HTML browser (no download)
+    -- When "Use HTML reader" is ON: open article in browser or in-app HTML viewer (no download).
+    -- On devices with a system browser (Android, Linux, macOS): open URL in external browser.
+    -- On Kindle/Kobo/PocketBook: show URL in KOReader's HtmlBoxWidget (in-app, works everywhere).
     if self.settings.use_html_reader and entry_data and entry_data.url and entry_data.url ~= '' then
         local Device = require('device')
-        if Device.openLink then
+        local can_open_browser = Device.openLink and not (Device.isKindle or Device.isKobo or Device.isPocketBook)
+        if can_open_browser then
             Device:openLink(entry_data.url)
             return
         end
+        -- In-app HTML viewer (HtmlBoxWidget) for Kindle and other devices without a browser
+        local HtmlViewer = require('features/reader/html_viewer')
+        HtmlViewer.showUrl(entry_data.url, entry_data.title)
+        return
     end
     -- Use workflow directly for download-if-needed and open
     local EntryWorkflow = require('features/browser/download/download_entry')

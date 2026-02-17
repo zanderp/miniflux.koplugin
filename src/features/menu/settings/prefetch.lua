@@ -32,11 +32,11 @@ function Prefetch.getMenuItem(plugin)
                     keep_menu_open = true,
                     sub_item_table_func = function()
                         return {
-                            { text = _('0 (off)'), keep_menu_open = true, callback = function(tm) plugin.settings.prefetch_count = 0; if tm and tm.updateItems then tm:updateItems() end end },
-                            { text = _('1'), keep_menu_open = true, callback = function(tm) plugin.settings.prefetch_count = 1; if tm and tm.updateItems then tm:updateItems() end end },
-                            { text = _('2'), keep_menu_open = true, callback = function(tm) plugin.settings.prefetch_count = 2; if tm and tm.updateItems then tm:updateItems() end end },
-                            { text = _('3'), keep_menu_open = true, callback = function(tm) plugin.settings.prefetch_count = 3; if tm and tm.updateItems then tm:updateItems() end end },
-                            { text = _('5'), keep_menu_open = true, callback = function(tm) plugin.settings.prefetch_count = 5; if tm and tm.updateItems then tm:updateItems() end end },
+                            { text = _('0 (off)'), keep_menu_open = true, callback = function(tm) plugin.settings.prefetch_count = 0; plugin.settings:save(); Notification:info(_('Prefetch: off')); if tm and tm.updateItems then tm:updateItems() end end },
+                            { text = _('1'), keep_menu_open = true, callback = function(tm) plugin.settings.prefetch_count = 1; plugin.settings:save(); Notification:info(T(_('Prefetch count: %1'), 1)); if tm and tm.updateItems then tm:updateItems() end end },
+                            { text = _('2'), keep_menu_open = true, callback = function(tm) plugin.settings.prefetch_count = 2; plugin.settings:save(); Notification:info(T(_('Prefetch count: %1'), 2)); if tm and tm.updateItems then tm:updateItems() end end },
+                            { text = _('3'), keep_menu_open = true, callback = function(tm) plugin.settings.prefetch_count = 3; plugin.settings:save(); Notification:info(T(_('Prefetch count: %1'), 3)); if tm and tm.updateItems then tm:updateItems() end end },
+                            { text = _('5'), keep_menu_open = true, callback = function(tm) plugin.settings.prefetch_count = 5; plugin.settings:save(); Notification:info(T(_('Prefetch count: %1'), 5)); if tm and tm.updateItems then tm:updateItems() end end },
                         }
                     end,
                 },

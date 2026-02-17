@@ -1,4 +1,5 @@
 local ButtonDialog = require('ui/widget/buttondialog')
+local ButtonDialogTitle = require('ui/widget/buttondialogtitle')
 local UIManager = require('ui/uimanager')
 local StorageUtils = require('domains/utils/storage_utils')
 local _ = require('gettext')
@@ -44,7 +45,9 @@ function StorageInfo.showDialog()
     -- Title and body in one: ButtonDialog may not render separate text on all platforms
     local title = _('Miniflux storage') .. '\n\n' .. body
 
-    local dialog = ButtonDialog:new({
+    -- ButtonDialogTitle has reliable Close button behavior (same as Settings dialog)
+    local ref = {}
+    ref.dialog = ButtonDialogTitle:new({
         title = title,
         title_align = 'center',
         buttons = {
@@ -52,16 +55,16 @@ function StorageInfo.showDialog()
                 {
                     text = _('Close'),
                     callback = function()
-                        UIManager:close(dialog)
+                        if ref.dialog then
+                            UIManager:close(ref.dialog)
+                            ref.dialog = nil
+                        end
                     end,
                 },
             },
         },
-        tap_close_callback = function()
-            UIManager:close(dialog)
-        end,
     })
-    UIManager:show(dialog)
+    UIManager:show(ref.dialog)
 end
 
 return StorageInfo

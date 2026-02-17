@@ -13,34 +13,50 @@ local EntryCollections = require('domains/utils/entry_collections')
 
 local MainView = {}
 
+-- Cache for async load: when we return main view without blocking, loadData runs in background and stores result here; next refresh uses it.
+MainView._cached_counts = nil
+
 ---@alias MainViewConfig {miniflux: Miniflux, settings: MinifluxSettings, onSelectUnread: function, onSelectFeeds: function, onSelectCategories: function, onSelectLocal: function, onSelectStarred: function, onSelectSearch: function}
 
----Complete main view component (React-style) - returns view data for browser rendering
+---Complete main view component (React-style) - returns view data for browser rendering.
+---Uses async load when online so the UI does not block (avoids hang when opening browser or pressing Back/X).
 ---@param config MainViewConfig
 ---@return table|nil View data for browser rendering, or nil on error
 function MainView.show(config)
-    -- Check network connectivity
     local NetworkMgr = require('ui/network/manager')
+    local UIManager = require('ui/uimanager')
     local is_online = NetworkMgr:isOnline()
 
-    -- Always get local entries count
     local local_entries = EntryCollections.getLocalEntries()
     local local_count = #local_entries
 
     local counts = nil
     if is_online then
-        -- Try to load online data if connected using loader pattern
-        local _error_msg
-        counts, _error_msg = MainView.loadData(config.miniflux)
-        if not counts then
-            -- Fall back to offline mode instead of showing error
-            is_online = false
+        if MainView._cached_counts then
+            counts = MainView._cached_counts
+            MainView._cached_counts = nil
+        else
+            -- Return immediately with placeholder and load in background so we don't block (fixes X/Back hang)
+            counts = {
+                unread_count = 0,
+                feeds_count = 0,
+                categories_count = 0,
+                starred_count = 0,
+            }
+            local miniflux = config.miniflux
+            local browser = miniflux and miniflux.browser
+            UIManager:scheduleIn(0, function()
+                local loaded, _err = MainView.loadData(miniflux, { silent = true })
+                if loaded and browser then
+                    MainView._cached_counts = loaded
+                    browser:refreshCurrentViewData()
+                end
+            end)
         end
     end
 
-    -- Generate menu items using internal builder
     local main_items = MainView.buildItems({
-        counts = counts, -- Will be nil if offline
+        counts = counts,
         local_count = local_count,
         is_online = is_online,
         callbacks = {
@@ -53,33 +69,31 @@ function MainView.show(config)
         },
     })
 
-    -- Build clean title (status shown in subtitle now)
     local title = _('Miniflux')
-
-    -- Build filter mode subtitle
     local filter_subtitle = ViewUtils.buildFilterModeSubtitle(config.settings)
 
-    -- Return view data for browser to render
     return {
         title = title,
         items = main_items,
         page_state = nil,
         subtitle = filter_subtitle,
-        is_root = true, -- Signals browser to clear navigation history
+        is_root = true,
     }
 end
 
 ---Load initial data needed for main screen using domain loader pattern
 ---@param miniflux Miniflux Plugin instance with domain modules
+---@param opts? { silent?: boolean } If silent, do not show loading notification (e.g. when loading in background)
 ---@return table|nil result, string|nil error
-function MainView.loadData(miniflux)
+function MainView.loadData(miniflux, opts)
+    opts = opts or {}
     local Notification = require('shared/widgets/notification')
-    local loading_notification = Notification:info(_('Loading...'))
+    local loading_notification = opts.silent and nil or Notification:info(_('Loading...'))
 
     -- Get unread count from entries domain
     local unread_count, unread_err = miniflux.entries:getUnreadCount()
     if unread_err then
-        loading_notification:close()
+        if loading_notification then loading_notification:close() end
         return nil, unread_err.message
     end
     ---@cast unread_count -nil
@@ -87,7 +101,7 @@ function MainView.loadData(miniflux)
     -- Get feeds count from feeds domain
     local feeds_count, feeds_err = miniflux.feeds:getFeedCount()
     if feeds_err then
-        loading_notification:close()
+        if loading_notification then loading_notification:close() end
         return nil, feeds_err.message
     end
     ---@cast feeds_count -nil
@@ -95,12 +109,12 @@ function MainView.loadData(miniflux)
     -- Get categories count from categories domain
     local categories_count, categories_err = miniflux.categories:getCategoryCount()
     if categories_err then
-        loading_notification:close()
+        if loading_notification then loading_notification:close() end
         return nil, categories_err.message
     end
     ---@cast categories_count -nil
 
-    loading_notification:close()
+    if loading_notification then loading_notification:close() end
 
     -- Starred count (bookmarked entries)
     local starred_result, _starred_err = miniflux.entries:getEntries({

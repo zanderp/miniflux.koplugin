@@ -107,18 +107,36 @@ function MinifluxReaderLink:setupLinkDialogIntegration()
     -- Store reference to self for use in closures
     local service = self
 
-    -- Add "Open in browser" for any link (e.g. original article URL) – opens in system/HTML browser
+    -- Add "Open in browser" for any link – opens in system browser (Android, Linux, macOS).
     self.reader_link:addToExternalLinkDialog('10_open_in_browser', function(this, link_url)
         return {
             text = _('Open in browser'),
             callback = function()
                 UIManager:close(this.external_link_dialog)
-                if link_url and link_url ~= '' and Device.openLink then
+                if link_url and link_url ~= '' and Device.openLink and not (Device.isKindle or Device.isKobo or Device.isPocketBook) then
                     Device:openLink(link_url)
                 end
             end,
             show_in_dialog_func = function()
-                return link_url and link_url ~= '' and Device.openLink
+                local has_browser = Device.openLink and not (Device.isKindle or Device.isKobo or Device.isPocketBook)
+                return link_url and link_url ~= '' and has_browser
+            end,
+        }
+    end)
+
+    -- On Kindle/Kobo/PocketBook: "Open in HTML viewer" – fetch URL and show in HtmlBoxWidget (in-app).
+    self.reader_link:addToExternalLinkDialog('12_open_in_html_viewer', function(this, link_url)
+        return {
+            text = _('Open in HTML viewer'),
+            callback = function()
+                UIManager:close(this.external_link_dialog)
+                if link_url and link_url ~= '' and (Device.isKindle or Device.isKobo or Device.isPocketBook) then
+                    local HtmlViewer = require('features/reader/html_viewer')
+                    HtmlViewer.showUrl(link_url)
+                end
+            end,
+            show_in_dialog_func = function()
+                return link_url and link_url ~= '' and (Device.isKindle or Device.isKobo or Device.isPocketBook)
             end,
         }
     end)

@@ -193,16 +193,33 @@ function MinifluxEndOfBook:showDialog(entry_info)
                 text = _('★ Toggle bookmark'),
                 callback = function()
                     UIManager:close(dialog)
-                    if not EntryValidation.isValidId(entry_info.entry_id) then
-                        Notification:warning(_('Cannot update bookmark: invalid entry ID'))
-                        return
-                    end
-                    local _, err = self.miniflux.entries:toggleBookmark(entry_info.entry_id)
-                    if err then
-                        Notification:warning(err.message or _('Failed to update bookmark'))
-                    else
-                        Notification:success(_('Bookmark updated'))
-                    end
+                    local entry_id = entry_info.entry_id
+                    local miniflux = self.miniflux
+                    -- Defer toggle so dialog close completes first; run in pcall to avoid crashing the app
+                    UIManager:scheduleIn(0, function()
+                        if not EntryValidation.isValidId(entry_id) then
+                            Notification:warning(_('Cannot update bookmark: invalid entry ID'))
+                            return
+                        end
+                        if not miniflux or not miniflux.entries then
+                            Notification:warning(_('Cannot update bookmark'))
+                            return
+                        end
+                        local ok, ret = pcall(function()
+                            local r, e = miniflux.entries:toggleBookmark(entry_id)
+                            return { result = r, err = e }
+                        end)
+                        if not ok then
+                            Notification:warning(_('Failed to update bookmark'))
+                            return
+                        end
+                        local err = type(ret) == 'table' and ret.err or nil
+                        if err then
+                            Notification:warning(err.message or _('Failed to update bookmark'))
+                        else
+                            Notification:success(_('Bookmark updated'))
+                        end
+                    end)
                 end,
             },
         },
