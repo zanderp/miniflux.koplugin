@@ -16,12 +16,12 @@ A KOReader plugin that lets you read RSS entries from a [Miniflux](https://minif
   - **Zoom**: Horizontal panning on the screen to zoom in/out (and adjust font size).
   - **Navigation menu**: Scroll all the way to the **bottom** of the article to see the end-of-entry menu: **⌂ Return to Miniflux**, next/previous entry, bookmark, delete, etc.
 - **Links in downloaded entries**: Tap a link in a downloaded entry → link dialog with **Open in HTML viewer** (e.g. on Kindle/Kobo/PocketBook), **Open in browser** (where supported), and **Open image in viewer** for image links. Follow links without leaving the plugin.
-- **Navigation in HTML viewer**: Use the menu at the bottom (see above). **⌂ Return to Miniflux** closes the viewer and returns you to the same list. In the normal (downloaded) viewer, **Close** opens the KOReader home folder.
+- **Navigation in HTML viewer**: Use the menu at the bottom (see above). **⌂ Return to Miniflux** closes the viewer and returns you to the same list (listing refreshes so read/starred state is visible). In the normal (downloaded) viewer, **Close** opens the KOReader home folder. **← Previous** and **Next →** use the same auto-delete rule: the entry you leave is deleted only if the setting is on, it’s read, and it’s not bookmarked (deletion happens after navigation so the next article opens correctly).
 
 ### Status, storage & sync
 
 - **Status & bookmarks**: Mark read/unread; **star/unstar** entries (Miniflux bookmark API). Sync runs when online. **Mark as read on open** (optional).
-- **Storage**: Custom **download location** (pick or create a folder). Delete single or selected entries, **clear all** downloaded entries. **Auto-delete read on close** removes the local copy when you leave a read entry. **Remove from history when deleting** (optional); bulk delete and auto-delete on close always clean KOReader history so you don’t see “entry.html (deleted)”.
+- **Storage**: Custom **download location** (pick or create a folder). Delete single or selected entries, **clear all** downloaded entries. **Auto-delete read on close** removes the local copy when you leave a read entry (Close, Return to Miniflux then X, or ← Previous / Next →). **Bookmarked (starred) entries are never auto-deleted**; if you tap **★ Toggle bookmark** in the dialog, that entry is not removed when you leave. **Remove from history when deleting** (optional); bulk delete and auto-delete on close always clean KOReader history so you don’t see “entry.html (deleted)”.
 - **E-ink**: Optional image proxy for e-ink-friendly scaling. **Reliable close**: When you leave the reader and press **X**, the plugin and browser close in one step with a full repaint so you don’t get a stuck screen.
 - **More**: Prefetch next N entries (Unread or Starred), image recovery (re-download missing images), delete by date range, storage info, delete all images (keep text). Settings persist (HTML reader, auto-delete on close, etc.).
 
@@ -89,7 +89,9 @@ A KOReader plugin that lets you read RSS entries from a [Miniflux](https://minif
   - [x] **Auto-delete read on close** (optional)
   - [x] **Use HTML reader** setting (download vs in-app HTML)
   - [x] **Remove from history when deleting** (optional; bulk delete and auto-delete on close always clean history)
-  - [ ] **Return to Miniflux in normal (downloaded) mode** — Not yet implemented; normal mode has Close (KOReader home) and Cancel. Return to Miniflux is available in the HTML reader only.
+  - [x] **Return to Miniflux in normal (downloaded) mode** — When you opened from the plugin, the end-of-entry dialog shows **⌂ Return to Miniflux** (closes reader, returns to the same list, and refreshes it so read/starred state is visible) and **Close** (opens KOReader home). When opened from file manager, only Close and Cancel.
+  - [x] **Bookmarked entries never auto-deleted** — Starred entries are never removed by auto-delete. If you tap **★ Toggle bookmark** in the dialog, that entry is not auto-deleted when you use Close, Return to Miniflux, or ← Previous / Next →.
+  - [x] **Previous / Next and auto-delete** — **← Previous** and **Next →** use the same rule: the entry you leave is deleted (and removed from history) only if the setting is on, the entry is read, and it’s not bookmarked. Deletion runs after navigation so the next/previous article opens correctly.
 
 ## Technical Details
 

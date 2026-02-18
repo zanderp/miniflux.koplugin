@@ -106,15 +106,26 @@ function MinifluxEndOfBook:showDialog(entry_info)
 
     -- Load current metadata from doc_settings cache (not SDR) to see optimistic updates
     local metadata = doc_settings and doc_settings:readSetting('miniflux_entry')
+    local sdr_metadata = not (metadata and metadata.status) and EntryMetadata.loadMetadata(entry_info.entry_id)
 
     -- Use status for business logic (fallback to SDR if doc_settings unavailable)
-    local entry_status
-    if metadata and metadata.status then
-        entry_status = metadata.status
-    else
-        -- Fallback to SDR if doc_settings not available
-        local sdr_metadata = EntryMetadata.loadMetadata(entry_info.entry_id)
-        entry_status = sdr_metadata and sdr_metadata.status or 'unread'
+    local entry_status = (metadata and metadata.status) or (sdr_metadata and sdr_metadata.status) or 'unread'
+    local entry_starred = (metadata and metadata.starred == true) or (sdr_metadata and sdr_metadata.starred == true) or false
+
+    -- Re-read current starred/status at action time. If user toggled bookmark this session, skip auto-delete.
+    local BookmarkToggledFlag = require('shared/bookmark_toggled_flag')
+    local function getCurrentStarredAndStatus()
+        if BookmarkToggledFlag.toggled then
+            local meta = doc_settings and doc_settings:readSetting('miniflux_entry')
+            local sdr = not (meta and meta.status) and EntryMetadata.loadMetadata(entry_info.entry_id)
+            local status = (meta and meta.status) or (sdr and sdr.status) or 'unread'
+            return true, status
+        end
+        local meta = doc_settings and doc_settings:readSetting('miniflux_entry')
+        local sdr = not (meta and meta.status) and EntryMetadata.loadMetadata(entry_info.entry_id)
+        local status = (meta and meta.status) or (sdr and sdr.status) or 'unread'
+        local starred = (meta and meta.starred == true) or (sdr and sdr.starred == true) or false
+        return starred, status
     end
 
     -- Helper function to navigate to entry with consistent parameters
@@ -184,6 +195,19 @@ function MinifluxEndOfBook:showDialog(entry_info)
                         Notification:warning(err.message or _('Failed to update bookmark'))
                     else
                         Notification:success(_('Bookmark updated'))
+                        -- Persist starred so Close / Return to Miniflux see it (including after reopening dialog).
+                        BookmarkToggledFlag.toggled = true
+                        if doc_settings then
+                            local e = doc_settings:readSetting('miniflux_entry')
+                            if e and e.entry_id == entry_id then
+                                e.starred = not e.starred
+                                doc_settings:saveSetting('miniflux_entry', e)
+                                if doc_settings.flush then
+                                    doc_settings:flush()
+                                end
+                                pcall(EntryMetadata.updateMetadata, entry_id, { starred = e.starred })
+                            end
+                        end
                     end
                 end)
             end,
@@ -221,11 +245,27 @@ function MinifluxEndOfBook:showDialog(entry_info)
                 text = _('← Previous'),
                 callback = function()
                     UIManager:close(dialog)
+                    local entry_id_to_delete
+                    if not from_html_viewer then
+                        local current_starred, current_status = getCurrentStarredAndStatus()
+                        local auto_delete = self.miniflux.settings.auto_delete_read_on_close
+                            and EntryValidation.isEntryRead(current_status)
+                            and not current_starred
+                        if auto_delete and EntryValidation.isValidId(entry_info.entry_id) then
+                            entry_id_to_delete = entry_info.entry_id
+                        end
+                        BookmarkToggledFlag.toggled = false
+                    end
                     if entry_info.on_before_navigate then
                         entry_info.on_before_navigate()
                     end
                     if self.miniflux then
                         navigateToEntry('previous')
+                    end
+                    if entry_id_to_delete then
+                        UIManager:scheduleIn(0, function()
+                            EntryPaths.deleteLocalEntry(entry_id_to_delete, { silent = true, always_remove_from_history = true })
+                        end)
                     end
                 end,
             },
@@ -233,18 +273,34 @@ function MinifluxEndOfBook:showDialog(entry_info)
                 text = _('Next →'),
                 callback = function()
                     UIManager:close(dialog)
+                    local entry_id_to_delete
+                    if not from_html_viewer then
+                        local current_starred, current_status = getCurrentStarredAndStatus()
+                        local auto_delete = self.miniflux.settings.auto_delete_read_on_close
+                            and EntryValidation.isEntryRead(current_status)
+                            and not current_starred
+                        if auto_delete and EntryValidation.isValidId(entry_info.entry_id) then
+                            entry_id_to_delete = entry_info.entry_id
+                        end
+                        BookmarkToggledFlag.toggled = false
+                    end
                     if entry_info.on_before_navigate then
                         entry_info.on_before_navigate()
                     end
                     if self.miniflux then
                         navigateToEntry('next')
                     end
+                    if entry_id_to_delete then
+                        UIManager:scheduleIn(0, function()
+                            EntryPaths.deleteLocalEntry(entry_id_to_delete, { silent = true, always_remove_from_history = true })
+                        end)
+                    end
                 end,
             },
         },
         row2,
         (function()
-            -- ⌂ Return to Miniflux only for HTML reader; normal document viewer has Close (open Miniflux folder) + Cancel.
+            -- row3: Return to Miniflux (when we have a return path), Close (normal mode), Cancel
             local row3 = {
                 {
                     text = _('Cancel'),
@@ -253,7 +309,14 @@ function MinifluxEndOfBook:showDialog(entry_info)
                     end,
                 },
             }
-            if from_html_viewer and entry_info.on_return_to_browser then
+            local has_return_to_browser = from_html_viewer and entry_info.on_return_to_browser
+            -- Use shared module so reader (which may load a separate plugin copy) sees the same context as main.
+            local BrowserContext = require('shared/browser_context')
+            local ctx = BrowserContext.context
+            local has_browser_context = not from_html_viewer and ctx and ctx.type
+
+            -- ⌂ Return to Miniflux: HTML viewer uses callback; normal mode closes reader then refresh listing
+            if has_return_to_browser then
                 table.insert(row3, 1, {
                     text = _('⌂ Return to Miniflux'),
                     callback = function()
@@ -261,14 +324,60 @@ function MinifluxEndOfBook:showDialog(entry_info)
                         entry_info.on_return_to_browser()
                     end,
                 })
-            else
+            elseif has_browser_context then
                 table.insert(row3, 1, {
-                    text = _('Close'),
+                    text = _('⌂ Return to Miniflux'),
                     callback = function()
                         UIManager:close(dialog)
-                        local entry_id = entry_info.entry_id
-                        local auto_delete = self.miniflux.settings.auto_delete_read_on_close
-                            and EntryValidation.isEntryRead(entry_status)
+                        local current_starred, current_status = getCurrentStarredAndStatus()
+                        local LastReturnedEntry = require('shared/last_returned_entry')
+                        LastReturnedEntry.entry_id = entry_info.entry_id
+                        LastReturnedEntry.is_read = EntryValidation.isEntryRead(current_status)
+                        LastReturnedEntry.is_starred = current_starred
+                        BookmarkToggledFlag.toggled = false
+                        local ReaderUI = require('apps/reader/readerui')
+                        if ReaderUI.instance then
+                            ReaderUI.instance:onClose()
+                        end
+                        -- Refresh the listing when returning so it shows updated state (e.g. starred, read).
+                        UIManager:scheduleIn(0.2, function()
+                            local MainInstance = require('shared/main_instance')
+                            local miniflux = MainInstance.main_instance
+                            if miniflux and miniflux.browser then
+                                pcall(function()
+                                    miniflux.browser:refreshCurrentViewData()
+                                end)
+                                UIManager:setDirty('all', 'full')
+                            end
+                        end)
+                    end,
+                })
+            end
+
+            -- Close: available in both flows (HTML viewer and normal). Opens KOReader home; in dialog applies auto-delete when setting on.
+            table.insert(row3, 1, {
+                text = _('Close'),
+                callback = function()
+                    UIManager:close(dialog)
+                    local entry_id = entry_info.entry_id
+                    local current_starred, current_status = getCurrentStarredAndStatus()
+                    local auto_delete = self.miniflux.settings.auto_delete_read_on_close
+                        and EntryValidation.isEntryRead(current_status)
+                        and not current_starred
+                    BookmarkToggledFlag.toggled = false
+                    if from_html_viewer then
+                        -- HTML viewer: close the viewer first (return to browser), then open KOReader home.
+                        if entry_info.on_return_to_browser then
+                            entry_info.on_return_to_browser()
+                        end
+                        UIManager:scheduleIn(0.15, function()
+                            if auto_delete and EntryValidation.isValidId(entry_id) then
+                                EntryPaths.deleteLocalEntry(entry_id, { silent = true, always_remove_from_history = true })
+                            end
+                            EntryPaths.openKoreaderHomeFolder()
+                        end)
+                    else
+                        -- Normal (downloaded) flow: close reader then open home; optional auto-delete.
                         if auto_delete and EntryValidation.isValidId(entry_id) then
                             local ReaderUI = require('apps/reader/readerui')
                             if ReaderUI.instance then
@@ -281,9 +390,9 @@ function MinifluxEndOfBook:showDialog(entry_info)
                         else
                             EntryPaths.openKoreaderHomeFolder()
                         end
-                    end,
-                })
-            end
+                    end
+                end,
+            })
             return row3
         end)(),
     }
@@ -322,7 +431,26 @@ function MinifluxEndOfBook:showDialog(entry_info)
     ---@diagnostic disable: inject-field
     function dialog:onNavigateTo(direction)
         UIManager:close(dialog)
+        local entry_id_to_delete
+        if not from_html_viewer then
+            local current_starred, current_status = getCurrentStarredAndStatus()
+            local auto_delete = self.miniflux.settings.auto_delete_read_on_close
+                and EntryValidation.isEntryRead(current_status)
+                and not current_starred
+            if auto_delete and EntryValidation.isValidId(entry_info.entry_id) then
+                entry_id_to_delete = entry_info.entry_id
+            end
+            BookmarkToggledFlag.toggled = false
+        end
+        if entry_info.on_before_navigate then
+            entry_info.on_before_navigate()
+        end
         navigateToEntry(direction)
+        if entry_id_to_delete then
+            UIManager:scheduleIn(0, function()
+                EntryPaths.deleteLocalEntry(entry_id_to_delete, { silent = true, always_remove_from_history = true })
+            end)
+        end
         return true
     end
 
@@ -334,27 +462,29 @@ end
 ---Return to the browser view where the user was before opening this entry.
 ---Populates browser paths so the back button works (see PR #62 review).
 ---When browser/plugin were closed for the reader, re-show plugin first and reset browser state so X closes cleanly.
+---Uses shared main_instance when in reader context (reader's plugin instance has no .browser in stack).
 function MinifluxEndOfBook:returnToBrowser()
     logger.dbg('[Miniflux:EndOfBook] returnToBrowser')
-    if not self.miniflux or not self.miniflux.browser then
-        logger.dbg('[Miniflux:EndOfBook] returnToBrowser: no miniflux or browser')
+    local MainInstance = require('shared/main_instance')
+    local miniflux = MainInstance.main_instance or self.miniflux
+    if not miniflux or not miniflux.browser then
+        logger.dbg('[Miniflux:EndOfBook] returnToBrowser: no main miniflux or browser')
         return
     end
-    local was_closed = not UIManager:isWidgetShown(self.miniflux)
-    -- Re-show plugin first if it was closed when entering the reader, so stack is Plugin -> Browser and X closes both.
+    local was_closed = not UIManager:isWidgetShown(miniflux)
     if was_closed then
         logger.dbg('[Miniflux:EndOfBook] returnToBrowser: re-showing plugin first')
-        UIManager:show(self.miniflux)
-        -- Reset browser state so we don't carry stale paths/overlay from before close (avoids bad state / stuck on X).
-        self.miniflux.browser.paths = {}
-        self.miniflux.browser.current_overlay = nil
+        UIManager:show(miniflux)
     end
+    -- Always reset browser state when returning from reader so X closes cleanly (no stale overlay/paths).
+    miniflux.browser.paths = {}
+    miniflux.browser.current_overlay = nil
 
-    local context = self.miniflux:getBrowserContext()
+    local context = miniflux:getBrowserContext()
 
     if not context or not context.type then
         logger.dbg('[Miniflux:EndOfBook] returnToBrowser: no context, opening main')
-        self.miniflux.browser:open()
+        miniflux.browser:open()
         return
     end
     logger.dbg('[Miniflux:EndOfBook] returnToBrowser context:', context.type, context.id or context.search or '')
@@ -364,12 +494,12 @@ function MinifluxEndOfBook:returnToBrowser()
     local nav_state
 
     if context.type == 'feed' then
-        table.insert(self.miniflux.browser.paths, { from = 'main', to = 'feeds' })
+        table.insert(miniflux.browser.paths, { from = 'main', to = 'feeds' })
         nav_state = { from = 'feeds', to = 'feed_entries' }
         view_name = 'feed_entries'
         nav_context = { feed_id = context.id }
     elseif context.type == 'category' then
-        table.insert(self.miniflux.browser.paths, { from = 'main', to = 'categories' })
+        table.insert(miniflux.browser.paths, { from = 'main', to = 'categories' })
         nav_state = { from = 'categories', to = 'category_entries' }
         view_name = 'category_entries'
         nav_context = { category_id = context.id }
@@ -390,11 +520,18 @@ function MinifluxEndOfBook:returnToBrowser()
         view_name = 'main'
     end
 
-    self.miniflux.browser:navigate({
+    miniflux.browser:navigate({
         view_name = view_name,
         context = nav_context,
         pending_nav_state = nav_state,
     })
+
+    -- The reader created a separate plugin instance; it may still be on the stack. Close it so we're left with the main instance's browser only (otherwise X closes the wrong one and the other stays).
+    local reader_plugin = self.miniflux
+    if reader_plugin and reader_plugin ~= miniflux and UIManager:isWidgetShown(reader_plugin) then
+        logger.dbg('[Miniflux:EndOfBook] returnToBrowser: closing reader plugin instance')
+        UIManager:close(reader_plugin)
+    end
 end
 
 ---Cleanup method - revert the wrapped method

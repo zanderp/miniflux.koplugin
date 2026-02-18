@@ -42,6 +42,7 @@ function EntryMetadata.saveMetadata(params)
         title = entry_data.title,
         url = entry_data.url,
         status = entry_data.status,
+        starred = entry_data.starred == true,
         published_at = entry_data.published_at,
         images = images_mapping,
         last_updated = os.date('%Y-%m-%d %H:%M:%S', os.time()),
@@ -68,6 +69,7 @@ function EntryMetadata.saveMetadata(params)
     MinifluxBrowser.setEntryInfoCache(entry_data.id, {
         id = entry_data.id,
         status = entry_data.status,
+        starred = entry_metadata.starred,
         title = entry_data.title,
         published_at = entry_data.published_at,
         url = entry_data.url,
@@ -188,6 +190,7 @@ function EntryMetadata.updateMetadata(entry_id, updates)
     MinifluxBrowser.setEntryInfoCache(entry_id, {
         id = entry_id,
         status = entry_metadata.status,
+        starred = entry_metadata.starred,
         title = entry_metadata.title,
         published_at = entry_metadata.published_at,
         url = entry_metadata.url,

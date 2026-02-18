@@ -39,6 +39,8 @@ function EntryReader.openEntry(file_path, opts)
     logger.dbg('[Miniflux:EntryWorkflow] openEntry', file_path and file_path:match('[^/]+$') or file_path, 'context:', context and context.type or 'nil')
 
     if context then
+        local BrowserContext = require('shared/browser_context')
+        BrowserContext.context = context
         MinifluxEvent:broadcastMinifluxBrowserContextChange({ context = context })
     end
 
