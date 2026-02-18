@@ -17,7 +17,7 @@ local MainView = {}
 -- Cache for async load: when we return main view without blocking, loadData runs in background and stores result here; next refresh uses it.
 MainView._cached_counts = nil
 
----@alias MainViewConfig {miniflux: Miniflux, settings: MinifluxSettings, onSelectUnread: function, onSelectFeeds: function, onSelectCategories: function, onSelectLocal: function, onSelectStarred: function, onSelectSearch: function}
+---@alias MainViewConfig {miniflux: Miniflux, settings: MinifluxSettings, onSelectUnread: function, onSelectRead: function, onSelectFeeds: function, onSelectCategories: function, onSelectLocal: function, onSelectStarred: function, onSelectSearch: function}
 
 ---Complete main view component (React-style) - returns view data for browser rendering.
 ---Uses async load when online so the UI does not block (avoids hang when opening browser or pressing Back/X).
@@ -44,6 +44,7 @@ function MainView.show(config)
                 feeds_count = 0,
                 categories_count = 0,
                 starred_count = 0,
+                read_count = 0,
             }
             local miniflux = config.miniflux
             local browser = miniflux and miniflux.browser
@@ -81,6 +82,7 @@ function MainView.show(config)
         is_online = is_online,
         callbacks = {
             onSelectUnread = config.onSelectUnread,
+            onSelectRead = config.onSelectRead,
             onSelectFeeds = config.onSelectFeeds,
             onSelectCategories = config.onSelectCategories,
             onSelectLocal = config.onSelectLocal,
@@ -145,11 +147,21 @@ function MainView.loadData(miniflux, opts)
     })
     local starred_count = (starred_result and starred_result.total) or 0
 
+    -- Read count
+    local read_result, _read_err = miniflux.entries:getEntries({
+        status = { 'read' },
+        limit = 1,
+        order = miniflux.settings.order,
+        direction = miniflux.settings.direction,
+    })
+    local read_count = (read_result and read_result.total) or 0
+
     return {
         unread_count = unread_count or 0,
         feeds_count = feeds_count or 0,
         categories_count = categories_count or 0,
         starred_count = starred_count,
+        read_count = read_count,
     }
 end
 
@@ -170,6 +182,13 @@ function MainView.buildItems(config)
             text = _('Unread'),
             mandatory = tostring(counts.unread_count or 0),
             callback = callbacks.onSelectUnread,
+            item_key = 'unread', -- for long-press "Mark all as read" on main
+        })
+        table.insert(items, {
+            text = _('Read'),
+            mandatory = tostring(counts.read_count or 0),
+            callback = callbacks.onSelectRead,
+            item_key = 'read',
         })
         table.insert(items, {
             text = _('Starred'),

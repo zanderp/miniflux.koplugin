@@ -254,6 +254,18 @@ function MinifluxBrowser:toggleHideReadEntries()
     self:refreshCurrentViewData()
 end
 
+---Clear all caches synchronously so next fetch gets server data (counts and lists).
+---Call this before refresh after any bulk update so UI reflects changes in real time.
+function MinifluxBrowser:invalidateAllCaches()
+    if self.miniflux and self.miniflux.http_cache then
+        self.miniflux.http_cache:clear()
+    end
+    local MainView = require('features/browser/views/main_view')
+    MainView._cached_counts = nil
+    local MinifluxEvent = require('shared/event')
+    MinifluxEvent:broadcastMinifluxInvalidateCache()
+end
+
 ---Refresh current view data to apply setting changes
 function MinifluxBrowser:refreshCurrentViewData()
     -- Get current view info without manipulating navigation stack
@@ -297,18 +309,9 @@ end
 function MinifluxBrowser:refreshWithCacheInvalidation()
     logger.info('[Miniflux:Browser] Refreshing with cache invalidation')
     local Notification = require('shared/widgets/notification')
-
-    -- Show loading notification
     local loading_notification = Notification:info(_('Refreshing...'))
-
-    -- Invalidate all caches via event system
-    local MinifluxEvent = require('shared/event')
-    MinifluxEvent:broadcastMinifluxInvalidateCache()
-
-    -- Refresh current view with fresh data
+    self:invalidateAllCaches()
     self:refreshCurrentViewData()
-
-    -- Close loading notification and show success
     loading_notification:close()
     Notification:success(_('Refreshed with fresh data'))
 end
@@ -416,6 +419,9 @@ function MinifluxBrowser:getRouteHandlers(nav_config)
                 settings = self.settings,
                 onSelectUnread = function()
                     self:goForward({ from = 'main', to = 'unread_entries' })
+                end,
+                onSelectRead = function()
+                    self:goForward({ from = 'main', to = 'read_entries' })
                 end,
                 onSelectStarred = function()
                     self:goForward({ from = 'main', to = 'starred_entries' })
@@ -535,10 +541,48 @@ function MinifluxBrowser:getRouteHandlers(nav_config)
                 settings = self.settings,
                 page_state = nav_config.page_state,
                 onSelectItem = function(entry_data)
-                    local context = {
-                        type = 'unread',
-                    }
+                    local context = { type = 'unread' }
                     self:openItem(entry_data, context)
+                end,
+                onMarkAllAsRead = function()
+                    local Notification = require('shared/widgets/notification')
+                    local MinifluxEvent = require('shared/event')
+                    local loading = Notification:info(_('Marking up to 1000 entries as read... Please wait.'), { timeout = nil })
+                    local ok = self.miniflux.entries:markAllUnreadAsRead({
+                        dialogs = { error = { text = _('Failed to mark all as read') } },
+                    })
+                    if loading then loading:close() end
+                    if ok then
+                        self:invalidateAllCaches()
+                        self:refreshCurrentViewData()
+                        Notification:success(_('All unread entries marked as read'))
+                    end
+                end,
+            })
+        end,
+        read_entries = function()
+            local ReadEntriesView = require('features/browser/views/read_entries_view')
+            return ReadEntriesView.show({
+                entries = self.miniflux.entries,
+                settings = self.settings,
+                page_state = nav_config.page_state,
+                onSelectItem = function(entry_data)
+                    local context = { type = 'read' }
+                    self:openItem(entry_data, context)
+                end,
+                onRemoveAllFromRead = function()
+                    local Notification = require('shared/widgets/notification')
+                    local MinifluxEvent = require('shared/event')
+                    local loading = Notification:info(_('Removing up to 1000 from read... Please wait.'), { timeout = nil })
+                    local ok = self.miniflux.entries:markAllReadAsRemoved({
+                        dialogs = { error = { text = _('Failed to remove read entries') } },
+                    })
+                    if loading then loading:close() end
+                    if ok then
+                        self:invalidateAllCaches()
+                        self:refreshCurrentViewData()
+                        Notification:success(_('Read entries removed'))
+                    end
                 end,
             })
         end,
@@ -626,6 +670,67 @@ function MinifluxBrowser:getItemId(item_data)
     return nil
 end
 
+---Override: on main view, long-press on Unread shows "Mark all as read" (all unread in Miniflux)
+---@param item table Menu item
+---@return boolean true if event handled
+function MinifluxBrowser:onMenuHold(item)
+    if #(self.paths or {}) == 0 and item and item.item_key == 'unread' then
+        local ConfirmBox = require('ui/widget/confirmbox')
+        local UIManager = require('ui/uimanager')
+        local Notification = require('shared/widgets/notification')
+        local self_ref = self
+        local dialog = ConfirmBox:new{
+            text = _('Mark all as read') .. '\n\n' .. _('Marks up to 1000 unread entries as read (one batch). This may take a minute. Please be patient.'),
+            ok_text = _('Mark all as read'),
+            cancel_text = _('Cancel'),
+            ok_callback = function()
+                UIManager:scheduleIn(0.1, function()
+                    local loading = Notification:info(_('Marking up to 1000 entries as read... Please wait.'), { timeout = nil })
+                    local ok = self_ref.miniflux.entries:markAllUnreadAsRead({
+                        dialogs = { error = { text = _('Failed to mark all as read') } },
+                    })
+                    if loading then loading:close() end
+                    if ok then
+                        self_ref:invalidateAllCaches()
+                        self_ref:refreshCurrentViewData()
+                        Notification:success(_('All unread entries marked as read'))
+                    end
+                end)
+            end,
+        }
+        UIManager:show(dialog)
+        return true
+    end
+    if #(self.paths or {}) == 0 and item and item.item_key == 'read' then
+        local ConfirmBox = require('ui/widget/confirmbox')
+        local UIManager = require('ui/uimanager')
+        local Notification = require('shared/widgets/notification')
+        local self_ref = self
+        local dialog = ConfirmBox:new{
+            text = _('Read') .. '\n\n' .. _('Removes up to 1000 read entries from the list (one batch). This may take a while.'),
+            ok_text = _('Remove all from read'),
+            cancel_text = _('Cancel'),
+            ok_callback = function()
+                UIManager:scheduleIn(0.1, function()
+                    local loading = Notification:info(_('Removing up to 1000 from read... Please wait.'), { timeout = nil })
+                    local ok = self_ref.miniflux.entries:markAllReadAsRemoved({
+                        dialogs = { error = { text = _('Failed to remove read entries') } },
+                    })
+                    if loading then loading:close() end
+                    if ok then
+                        self_ref:invalidateAllCaches()
+                        self_ref:refreshCurrentViewData()
+                        Notification:success(_('Read entries removed'))
+                    end
+                end)
+            end,
+        }
+        UIManager:show(dialog)
+        return true
+    end
+    return Browser.onMenuHold(self, item)
+end
+
 ---Analyze selection to determine available actions efficiently (single-pass optimization)
 ---@param selected_items table Array of selected item objects
 ---@return {has_local: boolean, has_remote: boolean} Analysis results
@@ -679,6 +784,7 @@ function MinifluxBrowser:getSelectionActions()
         -- Check if we're in local entries view (entries already downloaded)
         local current_path = self.paths and #self.paths > 0 and self.paths[#self.paths]
         local is_local_view = current_path and current_path.to == 'local_entries'
+        local is_read_view = current_path and current_path.to == 'read_entries'
 
         -- Build file operation buttons (Download/Delete)
         local file_ops = {}
@@ -720,17 +826,26 @@ function MinifluxBrowser:getSelectionActions()
             table.insert(actions, button)
         end
 
-        -- Always add Mark actions as a guaranteed pair
+        -- Mark as Unread (always; in Read view everything is already read)
         table.insert(actions, {
             text = _('Mark as Unread'),
             callback = function(items)
                 self:markSelectedAsUnread(items)
             end,
         })
+        -- Mark as Read only when not in Read view (there they're already read)
+        if not is_read_view then
+            table.insert(actions, {
+                text = _('Mark as Read'),
+                callback = function(items)
+                    self:markSelectedAsRead(items)
+                end,
+            })
+        end
         table.insert(actions, {
-            text = _('Mark as Read'),
+            text = _('Remove'),
             callback = function(items)
-                self:markSelectedAsRead(items)
+                self:removeSelectedEntries(items)
             end,
         })
     else
@@ -910,19 +1025,59 @@ function MinifluxBrowser:markSelectedAsRead(selected_items)
     end
 
     if success then
-        -- Update status in current item_table for immediate visual feedback
         self:updateItemTableStatus(selected_items, { new_status = 'read', item_type = item_type })
+        self:invalidateAllCaches()
+        self:refreshCurrentViewData()
+    end
 
-        -- For feed/category operations, refresh data to show updated counts
-        if item_type == 'feed' or item_type == 'category' then
-            self:refreshCurrentViewData()
+    self:transitionTo(BrowserMode.NORMAL)
+    self:refreshCurrentView()
+end
+
+---Remove selected entries from Miniflux (mark as removed on server), then refresh list
+---@param selected_items table Array of selected item objects
+function MinifluxBrowser:removeSelectedEntries(selected_items)
+    if #selected_items == 0 then
+        return
+    end
+
+    local item_type = self:getItemType(selected_items[1])
+    if item_type ~= 'entry' then
+        return
+    end
+
+    local entry_ids = {}
+    for idx, item in ipairs(selected_items) do
+        if item.entry_data and item.entry_data.id then
+            table.insert(entry_ids, item.entry_data.id)
         end
     end
 
-    -- Clear selection and exit selection mode
-    self:transitionTo(BrowserMode.NORMAL)
+    local L = require('gettext')
+    local _, err = self.miniflux.entries:updateEntries(entry_ids, {
+        body = { status = 'removed' },
+        dialogs = {
+            loading = { text = L('Removing entries...'), timeout = nil },
+            error = { text = L('Failed to remove entries') },
+        },
+    })
 
-    -- Refresh visual state to show updated read/unread indicators
+    if not err then
+        self:invalidateAllCaches()
+        local Notification = require('shared/widgets/notification')
+        if #entry_ids == 1 then
+            Notification:info(L('Entry removed'))
+        else
+            Notification:info(T(L('%1 entries removed'), #entry_ids))
+        end
+        self:refreshCurrentViewData()
+        local EntryPaths = require('domains/utils/entry_paths')
+        for idx, id in ipairs(entry_ids) do
+            EntryPaths.deleteLocalEntry(id, { silent = true, always_remove_from_history = true })
+        end
+    end
+
+    self:transitionTo(BrowserMode.NORMAL)
     self:refreshCurrentView()
 end
 
@@ -951,14 +1106,12 @@ function MinifluxBrowser:markSelectedAsUnread(selected_items)
     })
 
     if success then
-        -- Update status in current item_table for immediate visual feedback
         self:updateItemTableStatus(selected_items, { new_status = 'unread', item_type = item_type })
+        self:invalidateAllCaches()
+        self:refreshCurrentViewData()
     end
 
-    -- Clear selection and exit selection mode
     self:transitionTo(BrowserMode.NORMAL)
-
-    -- Refresh visual state to show updated read/unread indicators
     self:refreshCurrentView()
 end
 

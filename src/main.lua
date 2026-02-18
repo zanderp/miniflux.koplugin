@@ -134,9 +134,9 @@ function Miniflux:init()
         db_name = 'miniflux_cache.sqlite',
     })
 
-    -- Create update service instance
+    -- Create update service instance (GitHub releases: zanderp/miniflux.koplugin)
     self.update_service = UpdateService:new({
-        repo_owner = 'AlgusDark',
+        repo_owner = 'zanderp',
         repo_name = 'miniflux.koplugin',
         plugin_path = self.path,
         logger_prefix = 'Miniflux:',
@@ -207,7 +207,7 @@ end
 
 ---Add Miniflux items to the main menu (called by KOReader).
 ---Used for both the file-manager main menu and the document reader menu.
----Uses same sorting_hint as other plugins: "more_tools" (Tools → More tools) in file manager, "main" in reader.
+---sorting_hint "tools" = direct under Tools (file manager); "main" = reader menu.
 ---@param menu_items table The main menu items table
 ---@return nil
 function Miniflux:addToMainMenu(menu_items)
@@ -215,7 +215,7 @@ function Miniflux:addToMainMenu(menu_items)
     if self.ui and self.ui.document then
         menu_items.miniflux.sorting_hint = 'main'
     else
-        menu_items.miniflux.sorting_hint = 'more_tools'
+        menu_items.miniflux.sorting_hint = 'tools'
     end
 end
 
@@ -259,6 +259,9 @@ end
 function Miniflux:onMinifluxCacheInvalidate()
     logger.info('[Miniflux:Main] Cache invalidation event received')
     self.http_cache:clear()
+    -- Clear main view counts cache so Back to main shows updated unread/read counts
+    local MainView = require('features/browser/views/main_view')
+    MainView._cached_counts = nil
 end
 
 -- =============================================================================

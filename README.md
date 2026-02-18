@@ -6,41 +6,64 @@ A KOReader plugin that lets you read RSS entries from a [Miniflux](https://minif
 
 ## Features
 
+### Browsing & lists
+
+- **Main list**: Unread, **Read**, Starred, Feeds, Categories, Search, and Local (downloaded). Counts update after actions.
+- **Read tab**: Browse all read entries (same order/limit as settings). Long-press **Read** on the main screen for “Remove all from read (up to 1000)”.
+- **Unread**: Long-press **Unread** on the main screen for “Mark all as read (up to 1000)”. In the Unread list, first row “Mark all as read (up to 1000)” does the same. Batches of up to 1000; loading until the server responds.
+- **Starred**: Bookmarked entries. **Search**: Full-text search via Miniflux API.
+- **Feeds & categories**: Navigate by feed or category; mark feed/category as read from selection mode.
+
+### Selection mode & bulk actions
+
+- **Selection**: Long-press an entry or use the check icon to enter selection mode. **Select all** / **Deselect all**; then choose an action.
+- **Mark as Read** / **Mark as Unread**: Apply to selected entries; list and main counts refresh after the server responds.
+- **Remove**: Mark selected entries as removed on the server (and remove local copies if downloaded). Available in Unread, Read, Starred, feed, category, and search.
+- **Download Selected** / **Delete Selected**: Shown when the selection has remote or local entries. Delete removes local files and cleans KOReader history.
+- In the **Read** list, the selection menu omits “Mark as Read” (entries are already read); Mark as Unread and Remove remain.
+
 ### Reading & HTML viewer
 
-- **Browse**: Feeds, categories, unread, **starred** (bookmarks), and **search** entries from your Miniflux server.
+- **Browse**: Feeds, categories, unread, read, starred, and search from your Miniflux server.
 - **Read**: Download entries (with optional images) for offline reading, or use the **HTML reader** setting to open articles in-app without saving.
 - **HTML viewer**: In-app reader with reflow to screen width, mobile User-Agent for readable layouts, and print-version request when supported. Works on all devices including Kindle.
   - **Exit**: Tap **top right** to close the viewer.
-  - **Scroll**: Vertical slide on the screen to scroll the page.
-  - **Zoom**: Horizontal panning on the screen to zoom in/out (and adjust font size).
-  - **Navigation menu**: Scroll all the way to the **bottom** of the article to see the end-of-entry menu: **⌂ Return to Miniflux**, next/previous entry, bookmark, delete, etc.
-- **Links in downloaded entries**: Tap a link in a downloaded entry → link dialog with **Open in HTML viewer** (e.g. on Kindle/Kobo/PocketBook), **Open in browser** (where supported), and **Open image in viewer** for image links. Follow links without leaving the plugin.
-- **Navigation in HTML viewer**: Use the menu at the bottom (see above). **⌂ Return to Miniflux** closes the viewer and returns you to the same list (listing refreshes so read/starred state is visible). In the normal (downloaded) viewer, **Close** opens the KOReader home folder. **← Previous** and **Next →** use the same auto-delete rule: the entry you leave is deleted only if the setting is on, it’s read, and it’s not bookmarked (deletion happens after navigation so the next article opens correctly).
+  - **Scroll**: Vertical slide to scroll; **horizontal pan** to zoom.
+  - **Navigation menu**: Scroll to the **bottom** for: **⌂ Return to Miniflux**, next/previous entry, bookmark, delete, etc.
+- **Links in downloaded entries**: Tap a link → **Open in HTML viewer**, **Open in browser** (where supported), or **Open image in viewer**. Follow links without leaving the plugin.
+- **Navigation**: **← Previous** and **Next →** use the same auto-delete rule as Close/Return; bookmarked entries are never auto-deleted.
 
 ### Status, storage & sync
 
-- **Status & bookmarks**: Mark read/unread; **star/unstar** entries (Miniflux bookmark API). Sync runs when online. **Mark as read on open** (optional).
-- **Storage**: Custom **download location** (pick or create a folder). Delete single or selected entries, **clear all** downloaded entries. **Auto-delete read on close** removes the local copy when you leave a read entry (Close, Return to Miniflux then X, or ← Previous / Next →). **Bookmarked (starred) entries are never auto-deleted**; if you tap **★ Toggle bookmark** in the dialog, that entry is not removed when you leave. **Remove from history when deleting** (optional); bulk delete and auto-delete on close always clean KOReader history so you don’t see “entry.html (deleted)”.
-- **E-ink**: Optional image proxy for e-ink-friendly scaling. **Reliable close**: When you leave the reader and press **X**, the plugin and browser close in one step with a full repaint so you don’t get a stuck screen.
-- **More**: Prefetch next N entries (Unread or Starred), image recovery (re-download missing images), delete by date range, storage info, delete all images (keep text). Settings persist (HTML reader, auto-delete on close, etc.).
+- **Status & bookmarks**: Mark read/unread; **star/unstar** (Miniflux bookmark API). Sync when online. **Mark as read on open** (optional).
+- **Storage**: Custom **download location**. Delete single or selected entries; **clear all** downloaded entries. **Auto-delete read on close** (optional). **Bookmarked entries are never auto-deleted**. **Remove from history when deleting** (optional); bulk delete and auto-delete always clean KOReader history.
+- **E-ink**: Optional image proxy for e-ink-friendly scaling. Reliable close with full repaint when leaving the reader.
+- **More**: Prefetch next N entries (Unread or Starred), image recovery, delete by date range, storage info, delete all images (keep text). Settings persist.
+
+### Menu & updates
+
+- **Tools menu**: Plugin appears under **Tools** (when supported by KOReader) for quicker access.
+- **Updates**: Check for updates from [zanderp/miniflux.koplugin](https://github.com/zanderp/miniflux.koplugin/releases) (Settings → Check for updates).
 
 ## Installation
 
-1. Download the [latest release](https://github.com/zanderp/miniflux.koplugin/releases/latest) (e.g. `miniflux.koplugin-0.0.17.zip`).
+1. Download the [latest release](https://github.com/zanderp/miniflux.koplugin/releases/latest) (e.g. `miniflux.koplugin-0.0.19.zip`).
 2. Unzip and copy the **miniflux.koplugin** folder into KOReader’s plugin directory.
 3. Enable the plugin in KOReader.
 
 ## Usage
 
-1. **Settings** (Miniflux → Settings): Set server URL and API token. Optionally set download location, entries limit, sort order, mark-as-read on open, auto-delete read on close, HTML reader, remove from history when deleting, and clear all downloads.
-2. **Read entries**: Open “Read entries” to see Unread, Starred, Feeds, Categories, Search, and Local (downloaded).
-3. **Search**: Use “Search” from the main list, enter a term, and open results from the Miniflux API.
-4. **Starred**: Open “Starred” to see bookmarked entries. Use “★ Toggle bookmark” in the end-of-entry dialog to star/unstar.
-5. **Download**: Tap an entry to download and open it. Long-press to enter selection mode and batch download.
-6. **HTML viewer gestures**: **Tap top right** to exit. **Vertical slide** to scroll; **horizontal pan** to zoom. Scroll to the **bottom** for the navigation menu (Return to Miniflux, next/previous, etc.). In the **normal** (downloaded) viewer, “Close” opens the KOReader home folder; use Back/Home to leave the reader.
-7. **Storage** (Settings): **Storage info** shows entry count, total size, image count/size. **Delete by date range** (1 week / 1 month / 3 months / 6 months), **Delete all images (keep text)**, **Image recovery** (re-download missing images).
-8. **Prefetch** (Settings → Prefetch next entries): Set count (0–5), then “From Unread” or “From Starred” to download the next N undownloaded entries.
+1. **Settings** (Miniflux → Settings): Server URL and API token. Optional: download location, entries limit, sort order, mark-as-read on open, auto-delete read on close, HTML reader, remove from history when deleting, clear all downloads.
+2. **Main list**: Open Miniflux from **Tools** to see Unread, Read, Starred, Feeds, Categories, Search, and Local.
+3. **Mark all as read**: Long-press **Unread** on the main screen, or in the Unread list tap the first row “Mark all as read (up to 1000)”. Confirm; wait for the server; list and counts refresh.
+4. **Remove all from read**: Long-press **Read** on the main screen, or in the Read list tap “Remove all from read (up to 1000)”. Confirm; wait for the server; list refreshes.
+5. **Selection mode**: Long-press an entry (or use the check icon). Select all/deselect all, then **Mark as Read**, **Mark as Unread**, **Remove**, **Download Selected**, or **Delete Selected** (when applicable).
+6. **Search**: Use Search from the main list; open results from the Miniflux API.
+7. **Starred**: Open Starred; use **★ Toggle bookmark** in the end-of-entry dialog to star/unstar.
+8. **Download**: Tap an entry to download and open. Long-press for selection mode and batch download.
+9. **HTML viewer**: Tap **top right** to exit. Vertical slide to scroll; horizontal pan to zoom. Scroll to the **bottom** for the navigation menu.
+10. **Storage** (Settings): Storage info, Delete by date range, Delete all images (keep text), Image recovery.
+11. **Prefetch** (Settings → Prefetch next entries): Set count (0–5), then “From Unread” or “From Starred”.
 
 ## Development Status
 
@@ -49,55 +72,81 @@ A KOReader plugin that lets you read RSS entries from a [Miniflux](https://minif
 - [x] **Feed and Category Browsing**
   - [x] List feeds and categories from Miniflux
   - [x] Navigate by feed/category
+- [x] **Entry lists**
+  - [x] Unread, **Read**, Starred, Feeds, Categories, Search, Local
+  - [x] Counts refresh after bulk/selection actions
 - [x] **Entry Management**
-  - [x] Browse by feed, category, unread, **starred**, and **search**
   - [x] Download entries (text + optional images) for offline reading
   - [x] Context-aware next/previous and return to browser
 - [x] **Status & Bookmarks**
-  - [x] Mark entries read/unread
-  - [x] **Star/unstar entries** (PUT /v1/entries/:id/bookmark)
+  - [x] Mark entries read/unread (single and selection)
+  - [x] Star/unstar entries (Miniflux bookmark API)
   - [x] Auto-mark as read when opening (optional)
-  - [x] Batch mark as read when offline
+  - [x] Sync when online
 - [x] **Offline**
   - [x] Full offline reading of downloaded entries
   - [x] Local file management and custom download location
 
-### 🚧 Storage Management
+### ✅ Bulk & selection actions
 
-- [x] **Bulk Entry Deletion**
-  - [x] Delete selected entries
-  - [x] **Clear all downloaded entries** (Settings)
-  - [x] **Delete by date range** (1 week, 1 month, 3 months, 6 months)
-  - [x] **Storage info** (entry count, total size, image count/size)
-- [x] **Selective Image Management**
-  - [x] **Delete all images** while keeping entry text (Settings)
-  - [x] **Image storage statistics** (in Storage info)
+- [x] **Mark all as read (up to 1000)**
+  - [x] Long-press Unread on main screen; confirm; loading until server responds
+  - [x] First row in Unread list “Mark all as read (up to 1000)”
+- [x] **Remove all from read (up to 1000)**
+  - [x] Long-press Read on main screen; confirm; loading until server responds
+  - [x] First row in Read list “Remove all from read (up to 1000)”
+- [x] **Selection mode**
+  - [x] Long-press or check icon; Select all / Deselect all
+  - [x] Mark as Read / Mark as Unread on selected entries
+  - [x] Remove selected (mark as removed on server; delete local copies)
+  - [x] Download Selected / Delete Selected when applicable
+  - [x] Read list: no “Mark as Read”; Mark as Unread and Remove available
 
-### 🔄 Background Operations
+### ✅ Storage management
 
+- [x] **Bulk entry deletion**
+  - [x] Delete selected entries (local)
+  - [x] Clear all downloaded entries (Settings)
+  - [x] Delete by date range (1 week, 1 month, 3 months, 6 months)
+  - [x] Storage info (entry count, total size, image count/size)
+- [x] **Selective image management**
+  - [x] Delete all images (keep text) (Settings)
+  - [x] Image storage statistics (in Storage info)
+
+### ✅ Background & UX
+
+- [x] **Cache & refresh**
+  - [x] Cache invalidation after bulk/selection updates so counts and lists match the server
 - [x] **Prefetching**
-  - [x] Configurable prefetch count (0, 1, 2, 3, 5); “Prefetch from Unread” / “Prefetch from Starred”
-- [x] **Image Recovery**
+  - [x] Configurable prefetch count (0, 1, 2, 3, 5); Prefetch from Unread / Prefetch from Starred
+- [x] **Image recovery**
   - [x] Re-download missing images for all downloaded entries (Settings)
+- [x] **Menu & updates**
+  - [x] Plugin in main Tools menu (when supported)
+  - [x] Check for updates from GitHub (zanderp/miniflux.koplugin)
 
-### 📊 Enhanced Reading Experience
+### ✅ Reading experience
 
-- [x] **Search and Organization**
-  - [x] **Full-text search** (Miniflux API `search` query)
-  - [x] **Starred entries** list and toggle bookmark
+- [x] **Search and organization**
+  - [x] Full-text search (Miniflux API)
+  - [x] Starred entries list and toggle bookmark
 - [x] **Reading options**
-  - [x] **Auto-delete read on close** (optional)
-  - [x] **Use HTML reader** setting (download vs in-app HTML)
-  - [x] **Remove from history when deleting** (optional; bulk delete and auto-delete on close always clean history)
-  - [x] **Return to Miniflux in normal (downloaded) mode** — When you opened from the plugin, the end-of-entry dialog shows **⌂ Return to Miniflux** (closes reader, returns to the same list, and refreshes it so read/starred state is visible) and **Close** (opens KOReader home). When opened from file manager, only Close and Cancel.
-  - [x] **Bookmarked entries never auto-deleted** — Starred entries are never removed by auto-delete. If you tap **★ Toggle bookmark** in the dialog, that entry is not auto-deleted when you use Close, Return to Miniflux, or ← Previous / Next →.
-  - [x] **Previous / Next and auto-delete** — **← Previous** and **Next →** use the same rule: the entry you leave is deleted (and removed from history) only if the setting is on, the entry is read, and it’s not bookmarked. Deletion runs after navigation so the next/previous article opens correctly.
+  - [x] Auto-delete read on close (optional)
+  - [x] Use HTML reader setting (download vs in-app HTML)
+  - [x] Remove from history when deleting (optional)
+  - [x] Return to Miniflux in downloaded mode; list refreshes so read/starred state is visible
+  - [x] Bookmarked entries never auto-deleted
+  - [x] Previous/Next and auto-delete rule consistent with Close/Return
 
-## Technical Details
+## Technical details
 
-- **API**: Uses Miniflux REST API (entries, feeds, categories, bookmark toggle, search).
-- **Modular layout**: API layer, domains (entries, feeds, categories), browser UI, reader integration.
+- **API**: Miniflux REST API (entries, feeds, categories, bookmark, search, status updates).
+- **Structure**: API layer, domains (entries, feeds, categories), browser UI, reader integration.
 - **Offline-first**: Works without network for downloaded entries; status and bookmark changes sync when online.
+
+## Release notes
+
+See [RELEASE_NOTES.md](RELEASE_NOTES.md) for version history (e.g. 0.0.19).
 
 ## Development
 
@@ -119,7 +168,7 @@ cargo install stylua selene
 ```bash
 task check     # Lint and check
 task fmt-fix   # Format with Stylua
-task build     # Build plugin for distribution
+task build    # Build plugin for distribution
 ```
 
 ### Testing with KOReader

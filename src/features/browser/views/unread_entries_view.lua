@@ -12,7 +12,7 @@ local _ = require('gettext')
 
 local UnreadEntriesView = {}
 
----@alias UnreadEntriesViewConfig {entries: Entries, settings: MinifluxSettings, page_state?: number, onSelectItem: function}
+---@alias UnreadEntriesViewConfig {entries: Entries, settings: MinifluxSettings, page_state?: number, onSelectItem: function, onMarkAllAsRead?: function}
 
 ---Complete unread entries view component - returns view data for rendering
 ---@param config UnreadEntriesViewConfig
@@ -41,6 +41,15 @@ function UnreadEntriesView.show(config)
         hide_read_entries = true, -- Always true for unread entries (affects empty message)
         onSelectItem = config.onSelectItem,
     })
+
+    -- Prepend "Mark all as read" action when callback provided (up to 1000 per batch)
+    if config.onMarkAllAsRead and #entries > 0 then
+        table.insert(menu_items, 1, {
+            text = _('Mark all as read (up to 1000)'),
+            mandatory = '',
+            callback = config.onMarkAllAsRead,
+        })
+    end
 
     -- Build clean title (status shown in subtitle now)
     local title = _('Unread Entries')

@@ -32,6 +32,24 @@ function Entries:getUnreadEntries(config)
     return result.entries or {}, nil
 end
 
+---Get read entries (status=read, same order/direction/limit as settings)
+---@param config? table Optional configuration with dialogs
+---@return MinifluxEntry[]|nil entries, Error|nil error
+function Entries:getReadEntries(config)
+    local options = {
+        status = { 'read' },
+        order = self.miniflux.settings.order,
+        direction = self.miniflux.settings.direction,
+        limit = self.miniflux.settings.limit,
+    }
+    local result, err = self.miniflux.api:getEntries(options, config)
+    if err then
+        return nil, err
+    end
+    ---@cast result -nil
+    return result.entries or {}, nil
+end
+
 ---Get unread count (cached - critical for main menu performance)
 ---@param config? table Optional configuration
 ---@return number|nil count, Error|nil error
@@ -69,6 +87,60 @@ end
 ---@return MinifluxEntriesResponse|nil result, Error|nil error
 function Entries:getEntries(options, config)
     return self.miniflux.api:getEntries(options, config)
+end
+
+---Mark all unread entries as read (batch: fetches unread with limit then updates status).
+---@param config? table Optional dialogs
+---@return boolean success
+function Entries:markAllUnreadAsRead(config)
+    config = config or {}
+    local result, err = self.miniflux.api:getEntries({
+        status = { 'unread' },
+        order = self.miniflux.settings.order,
+        direction = self.miniflux.settings.direction,
+        limit = 1000,
+    }, config)
+    if err or not result or not result.entries or #result.entries == 0 then
+        return false
+    end
+    local ids = {}
+    for _, e in ipairs(result.entries) do
+        if e.id then
+            table.insert(ids, e.id)
+        end
+    end
+    if #ids == 0 then
+        return true
+    end
+    local _, update_err = self.miniflux.api:updateEntries(ids, { body = { status = 'read' }, dialogs = config.dialogs })
+    return not update_err
+end
+
+---Mark all read entries as removed (batch: fetches read with limit then updates status).
+---@param config? table Optional dialogs
+---@return boolean success
+function Entries:markAllReadAsRemoved(config)
+    config = config or {}
+    local result, err = self.miniflux.api:getEntries({
+        status = { 'read' },
+        order = self.miniflux.settings.order,
+        direction = self.miniflux.settings.direction,
+        limit = 1000,
+    }, config)
+    if err or not result or not result.entries or #result.entries == 0 then
+        return true -- no read entries is success
+    end
+    local ids = {}
+    for _, e in ipairs(result.entries) do
+        if e.id then
+            table.insert(ids, e.id)
+        end
+    end
+    if #ids == 0 then
+        return true
+    end
+    local _, update_err = self.miniflux.api:updateEntries(ids, { body = { status = 'removed' }, dialogs = config.dialogs })
+    return not update_err
 end
 
 ---Toggle entry bookmark (star/unstar)
