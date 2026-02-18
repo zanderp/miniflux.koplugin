@@ -9,6 +9,7 @@ local IncludeImages = require('features/menu/settings/include_images')
 local MarkAsReadOnOpen = require('features/menu/settings/mark_as_read_on_open')
 local DownloadLocation = require('features/menu/settings/download_location')
 local AutoDeleteReadOnClose = require('features/menu/settings/auto_delete_read_on_close')
+local RemoveFromHistoryOnDelete = require('features/menu/settings/remove_from_history_on_delete')
 local UseHtmlReader = require('features/menu/settings/use_html_reader')
 local ClearAllDownloads = require('features/menu/settings/clear_all_downloads')
 local DeleteByDateRange = require('features/menu/settings/delete_by_date_range')
@@ -72,6 +73,7 @@ function Menu.build(plugin)
                     ProxyImageDownloader.getMenuItem(plugin.settings),
                     DownloadLocation.getMenuItem(plugin.settings),
                     AutoDeleteReadOnClose.getMenuItem(plugin.settings),
+                    RemoveFromHistoryOnDelete.getMenuItem(plugin.settings),
                     UseHtmlReader.getMenuItem(plugin.settings),
                     ClearAllDownloads.getMenuItem(),
                     DeleteByDateRange.getMenuItem(),

@@ -35,6 +35,9 @@ local DEFAULTS = {
     -- Auto-delete local copy when navigating away or closing a read entry
     auto_delete_read_on_close = false,
 
+    -- When true, remove deleted entries from KOReader history (single, bulk, auto-delete on close)
+    remove_from_history_on_delete = true,
+
     -- When true, open entries in HTML reader (no download); when false, download then open file
     use_html_reader = false,
 
@@ -68,6 +71,7 @@ local DEFAULTS = {
 ---@field auto_update_last_check number Timestamp of last update check
 ---@field download_dir string Custom download directory path (empty = use default)
 ---@field auto_delete_read_on_close boolean Delete local entry when closing/navigating if read
+---@field remove_from_history_on_delete boolean Remove deleted entries from KOReader history
 ---@field use_html_reader boolean Open article URL in system browser (no download)
 ---@field prefetch_count number Number of entries to prefetch (0 = off)
 local MinifluxSettings = {}
@@ -92,6 +96,7 @@ MinifluxSettings.Key = {
     MARK_AS_READ_ON_OPEN = 'mark_as_read_on_open',
     DOWNLOAD_DIR = 'download_dir',
     AUTO_DELETE_READ_ON_CLOSE = 'auto_delete_read_on_close',
+    REMOVE_FROM_HISTORY_ON_DELETE = 'remove_from_history_on_delete',
     USE_HTML_READER = 'use_html_reader',
     PREFETCH_COUNT = 'prefetch_count',
 }

@@ -275,7 +275,7 @@ function MinifluxEndOfBook:showDialog(entry_info)
                                 ReaderUI.instance:onClose()
                             end
                             UIManager:scheduleIn(0.15, function()
-                                EntryPaths.deleteLocalEntry(entry_id, { silent = true })
+                                EntryPaths.deleteLocalEntry(entry_id, { silent = true, always_remove_from_history = true })
                                 EntryPaths.openKoreaderHomeFolder()
                             end)
                         else

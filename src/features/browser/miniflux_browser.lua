@@ -1040,9 +1040,9 @@ function MinifluxBrowser:performBatchDelete(local_entries)
 
     local success_count = 0
 
-    -- Delete each entry
+    -- Delete each entry (always clean history on bulk delete)
     for _, entry_data in ipairs(local_entries) do
-        local success = EntryPaths.deleteLocalEntry(entry_data.id)
+        local success = EntryPaths.deleteLocalEntry(entry_data.id, { always_remove_from_history = true })
         if success then
             success_count = success_count + 1
         end

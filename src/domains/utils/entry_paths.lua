@@ -78,7 +78,7 @@ end
 
 ---Delete a local entry and its files
 ---@param entry_id number Entry ID
----@param opts? {silent?: boolean, open_folder?: boolean} Optional: silent = true skips notification and folder; open_folder = false skips only opening folder
+---@param opts? {silent?: boolean, open_folder?: boolean, always_remove_from_history?: boolean} Optional: silent = true skips notification; open_folder = false skips opening folder; always_remove_from_history = true forces history cleanup (bulk delete, auto-delete on close)
 ---@return boolean success True if deletion succeeded
 function EntryPaths.deleteLocalEntry(entry_id, opts)
     opts = opts or {}
@@ -88,17 +88,34 @@ function EntryPaths.deleteLocalEntry(entry_id, opts)
     local FFIUtil = require('ffi/util')
 
     local entry_dir = EntryPaths.getEntryDirectory(entry_id)
-    local html_path = EntryPaths.getEntryHtmlPath(entry_id)
+    -- Resolve canonical path before purge so it matches how KOReader stores paths in history
+    local entry_dir_canonical = FFIUtil.realpath(entry_dir) or entry_dir
     local ok = FFIUtil.purgeDir(entry_dir)
 
     if ok then
         -- Remove entry directory if empty (including empty hidden subdirs; closes #60, PR #63)
         Files.removeEmptyDirectory(entry_dir)
-        -- Remove from KOReader history so we don't leave broken entries
-        pcall(function()
-            local ReadHistory = require('readhistory')
-            ReadHistory:fileDeleted(html_path)
-        end)
+        -- Bulk delete and auto-delete on close always clean history; single delete respects setting
+        local remove_from_history = opts.always_remove_from_history
+            or LuaSettings:open(DataStorage:getSettingsDir() .. '/miniflux.lua'):readSetting('remove_from_history_on_delete', true)
+        if remove_from_history then
+            pcall(function()
+                local ReadHistory = require('readhistory')
+                local prefix_len = #entry_dir_canonical
+                local history_updated = false
+                for i = #ReadHistory.hist, 1, -1 do
+                    local file = ReadHistory.hist[i] and ReadHistory.hist[i].file
+                    if file and #file >= prefix_len and file:sub(1, prefix_len) == entry_dir_canonical then
+                        ReadHistory:removeItem(ReadHistory.hist[i], i, true)
+                        history_updated = true
+                    end
+                end
+                if history_updated then
+                    ReadHistory:ensureLastFile()
+                    ReadHistory:_flush()
+                end
+            end)
+        end
         -- Invalidate download cache for this entry
         local MinifluxBrowser = require('features/browser/miniflux_browser')
         MinifluxBrowser.deleteEntryInfoCache(entry_id)
