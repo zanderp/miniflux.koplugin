@@ -207,14 +207,15 @@ end
 
 ---Add Miniflux items to the main menu (called by KOReader).
 ---Used for both the file-manager main menu and the document reader menu.
----In the reader we set sorting_hint so "Miniflux" appears in the "main" tab (same area as File manager).
+---Uses same sorting_hint as other plugins: "more_tools" (Tools → More tools) in file manager, "main" in reader.
 ---@param menu_items table The main menu items table
 ---@return nil
 function Miniflux:addToMainMenu(menu_items)
     menu_items.miniflux = Menu.build(self)
-    -- In document viewer, put Miniflux in the "main" tab so user can open it like from the main menu.
     if self.ui and self.ui.document then
         menu_items.miniflux.sorting_hint = 'main'
+    else
+        menu_items.miniflux.sorting_hint = 'more_tools'
     end
 end
 
@@ -232,6 +233,8 @@ end
 ---Handle the read entries dispatcher event
 ---@return nil
 function Miniflux:onReadMinifluxEntries()
+    local MainInstance = require('shared/main_instance')
+    MainInstance.main_instance = self -- so reader's end-of-book can return to this browser
     self.browser:open()
 end
 
@@ -376,29 +379,26 @@ function Miniflux:handleEvent(ev)
 end
 
 ---Handle widget close event - cleanup resources and instances.
----Closes browser (and overlay) first so the stack clears; defers job termination
----so the event loop does not block (avoids hang when pressing X after returning from reading).
+---Closes browser and overlay only if still shown (browser may already have closed itself); defers
+---cleanup so the event loop does not block (avoids lock when pressing X after returning from reader).
 function Miniflux:onCloseWidget()
     logger.info('[Miniflux:Main] Plugin widget closing - cleaning up resources')
-    logger.dbg('[Miniflux:Main] onCloseWidget: closing browser and overlay first')
 
-    -- Close browser and any overlay so they are removed from the stack immediately (no deferred close).
+    -- Close browser/overlay only if still shown (pcall to avoid any close re-entry or error locking the UI).
     if self.browser then
-        local overlay = self.browser.current_overlay
-        if overlay and UIManager:isWidgetShown(overlay) then
-            logger.dbg('[Miniflux:Main] onCloseWidget: closing overlay')
+        pcall(function()
+            local overlay = self.browser.current_overlay
             self.browser.current_overlay = nil
-            UIManager:close(overlay)
-        end
-        if UIManager:isWidgetShown(self.browser) then
-            logger.dbg('[Miniflux:Main] onCloseWidget: closing browser')
-            UIManager:close(self.browser)
-        end
+            if overlay and UIManager:isWidgetShown(overlay) then
+                UIManager:close(overlay)
+            end
+            if UIManager:isWidgetShown(self.browser) then
+                UIManager:close(self.browser)
+            end
+        end)
     end
 
-    -- Defer cleanup so we return immediately. Do not call terminateBackgroundJobs() here:
-    -- terminateSubProcess can block (e.g. waiting on subprocess), which would hang the UI
-    -- when pressing X at browser root. Just clear state and unschedule the collector.
+    -- Defer cleanup so we return immediately; do not block in onCloseWidget.
     UIManager:scheduleIn(0, function()
         if self.subprocesses_pids and #self.subprocesses_pids > 0 then
             self.subprocesses_pids = {}
@@ -409,19 +409,22 @@ function Miniflux:onCloseWidget()
             end)
             self.subprocesses_collector = nil
         end
-        -- Flag all remaining widgets for repaint so KOReader UI redraws (setDirty("all") marks stack).
         UIManager:setDirty('all', 'full')
     end)
 end
 
 function Miniflux:onMinifluxBrowserContextChange(payload)
     logger.info('[Miniflux:browser_context] Browser context changed:', payload.context)
+    local BrowserContext = require('shared/browser_context')
+    BrowserContext.context = payload.context
     Miniflux.browser_context = payload.context
 end
 
 function Miniflux:getBrowserContext()
-    logger.info('[Miniflux:browser_context] Getting browser context:', Miniflux.browser_context)
-    return Miniflux.browser_context
+    local BrowserContext = require('shared/browser_context')
+    local ctx = BrowserContext.context or Miniflux.browser_context
+    logger.info('[Miniflux:browser_context] Getting browser context:', ctx)
+    return ctx
 end
 
 return Miniflux

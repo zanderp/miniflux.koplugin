@@ -355,6 +355,7 @@ end
 ---At root, close both browser and plugin so one X exits to KOReader (matches upstream: we close
 ---both when opening an entry via BrowserCloseRequest; also needed when user used "Return to Miniflux" from end-of-entry).
 ---Otherwise delegate to base Browser (back / close overlay).
+---Do all closes in scheduleIn so the Close handler returns immediately and the event loop never blocks.
 function MinifluxBrowser:close()
     local at_root = not self.paths or #self.paths == 0
     logger.dbg('[Miniflux:Browser] close() at_root:', at_root, 'paths:', self.paths and #self.paths or 0)
@@ -364,22 +365,43 @@ function MinifluxBrowser:close()
     logger.info('[Browser] Closing browser (and plugin)')
     local self_ref = self
     local miniflux = self.miniflux
+    -- Defer everything so we don't block the event loop (avoids lock state after closing document viewer).
     UIManager:scheduleIn(0, function()
         local overlay = self_ref.current_overlay
+        self_ref.current_overlay = nil
         if overlay and UIManager:isWidgetShown(overlay) then
-            self_ref.current_overlay = nil
             UIManager:close(overlay)
-            UIManager:scheduleIn(0, function()
-                if UIManager:isWidgetShown(self_ref) then UIManager:close(self_ref) end
-                if miniflux and UIManager:isWidgetShown(miniflux) then UIManager:close(miniflux, 'full') end
-                UIManager:setDirty('all', 'full')
-            end)
-        else
-            if overlay then self_ref.current_overlay = nil end
-            if UIManager:isWidgetShown(self_ref) then UIManager:close(self_ref) end
-            if miniflux and UIManager:isWidgetShown(miniflux) then UIManager:close(miniflux, 'full') end
-            UIManager:setDirty('all', 'full')
         end
+        if UIManager:isWidgetShown(self_ref) then
+            UIManager:close(self_ref)
+        end
+        UIManager:scheduleIn(0.15, function()
+            if miniflux and UIManager:isWidgetShown(miniflux) then
+                UIManager:close(miniflux, 'full')
+            end
+            -- Same as Close button in end-of-entry: if auto-delete read on close and we returned from a read entry, delete it + clean history.
+            local EntryPaths = require('domains/utils/entry_paths')
+            local EntryValidation = require('domains/utils/entry_validation')
+            local LastReturnedEntry = require('shared/last_returned_entry')
+            local entry_id = LastReturnedEntry.entry_id
+            local do_auto_delete = miniflux
+                and miniflux.settings
+                and miniflux.settings.auto_delete_read_on_close
+                and LastReturnedEntry.is_read
+                and not LastReturnedEntry.is_starred
+                and EntryValidation.isValidId(entry_id)
+            if do_auto_delete then
+                pcall(function()
+                    EntryPaths.deleteLocalEntry(entry_id, { silent = true, always_remove_from_history = true })
+                end)
+            end
+            LastReturnedEntry.entry_id = nil
+            LastReturnedEntry.is_read = false
+            LastReturnedEntry.is_starred = false
+            pcall(function()
+                EntryPaths.openKoreaderHomeFolder()
+            end)
+        end)
     end)
 end
 
