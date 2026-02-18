@@ -244,7 +244,7 @@ function MinifluxEndOfBook:showDialog(entry_info)
         },
         row2,
         (function()
-            -- ⌂ Return to Miniflux only for HTML reader; normal document viewer has Close (open Miniflux folder) + Cancel.
+            -- row3: Return to Miniflux (when we have a return path), Close (normal mode), Cancel
             local row3 = {
                 {
                     text = _('Cancel'),
@@ -253,15 +253,15 @@ function MinifluxEndOfBook:showDialog(entry_info)
                     end,
                 },
             }
-            if from_html_viewer and entry_info.on_return_to_browser then
-                table.insert(row3, 1, {
-                    text = _('⌂ Return to Miniflux'),
-                    callback = function()
-                        UIManager:close(dialog)
-                        entry_info.on_return_to_browser()
-                    end,
-                })
-            else
+            local has_return_to_browser = from_html_viewer and entry_info.on_return_to_browser
+            local has_browser_context = not from_html_viewer
+                and self.miniflux
+                and self.miniflux.browser
+                and self.miniflux:getBrowserContext()
+                and (self.miniflux:getBrowserContext()).type
+
+            -- Close: in normal mode opens KOReader home (or auto-deletes then home); in HTML viewer we don't show Close
+            if not has_return_to_browser then
                 table.insert(row3, 1, {
                     text = _('Close'),
                     callback = function()
@@ -281,6 +281,35 @@ function MinifluxEndOfBook:showDialog(entry_info)
                         else
                             EntryPaths.openKoreaderHomeFolder()
                         end
+                    end,
+                })
+            end
+
+            -- ⌂ Return to Miniflux: HTML viewer uses callback; normal mode closes reader then returnToBrowser()
+            if has_return_to_browser then
+                table.insert(row3, 1, {
+                    text = _('⌂ Return to Miniflux'),
+                    callback = function()
+                        UIManager:close(dialog)
+                        entry_info.on_return_to_browser()
+                    end,
+                })
+            elseif has_browser_context then
+                table.insert(row3, 1, {
+                    text = _('⌂ Return to Miniflux'),
+                    callback = function()
+                        UIManager:close(dialog)
+                        local ReaderUI = require('apps/reader/readerui')
+                        if ReaderUI.instance then
+                            ReaderUI.instance:onClose()
+                        end
+                        UIManager:scheduleIn(0.15, function()
+                            if self and self.miniflux then
+                                pcall(function()
+                                    self:returnToBrowser()
+                                end)
+                            end
+                        end)
                     end,
                 })
             end

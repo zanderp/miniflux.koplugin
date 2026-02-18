@@ -89,7 +89,7 @@ A KOReader plugin that lets you read RSS entries from a [Miniflux](https://minif
   - [x] **Auto-delete read on close** (optional)
   - [x] **Use HTML reader** setting (download vs in-app HTML)
   - [x] **Remove from history when deleting** (optional; bulk delete and auto-delete on close always clean history)
-  - [ ] **Return to Miniflux in normal (downloaded) mode** — Not yet implemented; normal mode has Close (KOReader home) and Cancel. Return to Miniflux is available in the HTML reader only.
+  - [x] **Return to Miniflux in normal (downloaded) mode** — When you opened from the plugin, the end-of-entry dialog shows **⌂ Return to Miniflux** (closes reader and returns to the same list) and **Close** (opens KOReader home). When opened from file manager, only Close and Cancel.
 
 ## Technical Details
 
