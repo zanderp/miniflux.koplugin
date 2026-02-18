@@ -35,11 +35,11 @@ local function batchChangeStatus(entry_ids, new_status, deps)
         offline_message = _('Marked as unread (will sync when online)')
     end
 
-    -- Try batch API call first
+    -- Try batch API call first (timeout = nil so loading stays until request completes and we close it)
     local _result, err = deps.entries:updateEntries(entry_ids, {
         body = { status = new_status },
         dialogs = {
-            loading = { text = progress_message },
+            loading = { text = progress_message, timeout = nil },
             -- Note: Don't show success/error dialogs here - we'll handle fallback ourselves
         },
     })
