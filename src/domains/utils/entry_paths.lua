@@ -88,11 +88,17 @@ function EntryPaths.deleteLocalEntry(entry_id, opts)
     local FFIUtil = require('ffi/util')
 
     local entry_dir = EntryPaths.getEntryDirectory(entry_id)
+    local html_path = EntryPaths.getEntryHtmlPath(entry_id)
     local ok = FFIUtil.purgeDir(entry_dir)
 
     if ok then
         -- Remove entry directory if empty (including empty hidden subdirs; closes #60, PR #63)
         Files.removeEmptyDirectory(entry_dir)
+        -- Remove from KOReader history so we don't leave broken entries
+        pcall(function()
+            local ReadHistory = require('readhistory')
+            ReadHistory:fileDeleted(html_path)
+        end)
         -- Invalidate download cache for this entry
         local MinifluxBrowser = require('features/browser/miniflux_browser')
         MinifluxBrowser.deleteEntryInfoCache(entry_id)

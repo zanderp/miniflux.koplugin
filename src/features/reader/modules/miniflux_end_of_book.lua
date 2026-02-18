@@ -266,7 +266,21 @@ function MinifluxEndOfBook:showDialog(entry_info)
                     text = _('Close'),
                     callback = function()
                         UIManager:close(dialog)
-                        EntryPaths.openKoreaderHomeFolder()
+                        local entry_id = entry_info.entry_id
+                        local auto_delete = self.miniflux.settings.auto_delete_read_on_close
+                            and EntryValidation.isEntryRead(entry_status)
+                        if auto_delete and EntryValidation.isValidId(entry_id) then
+                            local ReaderUI = require('apps/reader/readerui')
+                            if ReaderUI.instance then
+                                ReaderUI.instance:onClose()
+                            end
+                            UIManager:scheduleIn(0.15, function()
+                                EntryPaths.deleteLocalEntry(entry_id, { silent = true })
+                                EntryPaths.openKoreaderHomeFolder()
+                            end)
+                        else
+                            EntryPaths.openKoreaderHomeFolder()
+                        end
                     end,
                 })
             end
