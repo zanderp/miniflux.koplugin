@@ -781,26 +781,19 @@ function MinifluxBrowser:getSelectionActions()
     local actions = {}
 
     if item_type == 'entry' then
-        -- Check if we're in local entries view (entries already downloaded)
+        -- Check current view for context-aware actions
         local current_path = self.paths and #self.paths > 0 and self.paths[#self.paths]
         local is_local_view = current_path and current_path.to == 'local_entries'
         local is_read_view = current_path and current_path.to == 'read_entries'
+        local is_starred_view = current_path and current_path.to == 'starred_entries'
 
         -- Build file operation buttons (Download/Delete)
+        -- Local view: only Remove (no Delete Selected - Remove does server + local).
+        -- Starred view: only Remove (no Delete Selected - Remove works and refreshes).
         local file_ops = {}
-        if is_local_view then
-            -- Local view optimization: ALL entries are local, so always show delete, never download
-            table.insert(file_ops, {
-                text = _('Delete Selected'),
-                callback = function(items)
-                    self:deleteSelectedEntries(items)
-                end,
-            })
-        else
-            -- Non-local views: Smart button logic with single-pass analysis
+        if not is_local_view then
             local analysis = self:analyzeSelection(selected_items)
 
-            -- Show download only if selection contains non-downloaded entries
             if analysis.has_remote then
                 table.insert(file_ops, {
                     text = _('Download Selected'),
@@ -810,8 +803,8 @@ function MinifluxBrowser:getSelectionActions()
                 })
             end
 
-            -- Show delete only if selection contains downloaded entries
-            if analysis.has_local then
+            -- Delete Selected only in views where Remove doesn't cover it (not Local, not Starred)
+            if analysis.has_local and not is_starred_view then
                 table.insert(file_ops, {
                     text = _('Delete Selected'),
                     callback = function(items)
@@ -1070,11 +1063,12 @@ function MinifluxBrowser:removeSelectedEntries(selected_items)
         else
             Notification:info(T(L('%1 entries removed'), #entry_ids))
         end
-        self:refreshCurrentViewData()
         local EntryPaths = require('domains/utils/entry_paths')
         for idx, id in ipairs(entry_ids) do
             EntryPaths.deleteLocalEntry(id, { silent = true, always_remove_from_history = true })
         end
+        -- Refresh after deleting local files so Local list updates (getLocalEntries reads from disk)
+        self:refreshCurrentViewData()
     end
 
     self:transitionTo(BrowserMode.NORMAL)
@@ -1134,6 +1128,7 @@ function MinifluxBrowser:downloadSelectedEntries(selected_items)
     BatchDownloadEntriesWorkflow.execute({
         entry_data_list = entry_data_list,
         settings = self.settings,
+        miniflux = self.miniflux,
         completion_callback = function(status)
             -- Refresh view data to rebuild menu items with updated download status indicators
             self:refreshCurrentViewData()
@@ -1242,6 +1237,7 @@ function MinifluxBrowser:performBatchDelete(local_entries)
 
     -- Refresh view to update the entries list
     self:refreshCurrentViewData()
+    self:refreshCurrentView()
 
     -- Exit selection mode
     self:transitionTo(BrowserMode.NORMAL)

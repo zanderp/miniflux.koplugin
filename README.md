@@ -26,10 +26,11 @@ A KOReader plugin that lets you read RSS entries from a [Miniflux](https://minif
 
 - **Browse**: Feeds, categories, unread, read, starred, and search from your Miniflux server.
 - **Read**: Download entries (with optional images) for offline reading, or use the **HTML reader** setting to open articles in-app without saving.
-- **HTML viewer**: In-app reader with reflow to screen width, mobile User-Agent for readable layouts, and print-version request when supported. Works on all devices including Kindle.
+- **HTML viewer**: In-app reader with reflow to screen width, mobile User-Agent for readable layouts, and print-version request when supported. Works on all devices including Kindle. **Images**: The viewer was updated to include images in the in-app (print) preview: it fetches the page HTML, then fetches and inlines external images (up to a limit), sending a Referer so images load correctly; if some images don’t appear (e.g. over the limit or failed to load), use **download mode** with **Include images** for full offline content.
   - **Exit**: Tap **top right** to close the viewer.
   - **Scroll**: Vertical slide to scroll; **horizontal pan** to zoom.
   - **Navigation menu**: Scroll to the **bottom** for: **⌂ Return to Miniflux**, next/previous entry, bookmark, delete, etc.
+- **Downloaded entries & images**: To see images in downloaded articles, enable **Include images** in Settings. Downloaded HTML uses a base URL so relative image paths resolve to the entry folder in the reader. Image downloads use a browser User-Agent and proper URL escaping (e.g. `&amp;` → `&`) so that referrer- or URL-sensitive hosts work correctly.
 - **Links in downloaded entries**: Tap a link → **Open in HTML viewer**, **Open in browser** (where supported), or **Open image in viewer**. Follow links without leaving the plugin.
 - **Navigation**: **← Previous** and **Next →** use the same auto-delete rule as Close/Return; bookmarked entries are never auto-deleted.
 
@@ -47,7 +48,7 @@ A KOReader plugin that lets you read RSS entries from a [Miniflux](https://minif
 
 ## Installation
 
-1. Download the [latest release](https://github.com/zanderp/miniflux.koplugin/releases/latest) (e.g. `miniflux.koplugin-0.0.19.zip`).
+1. Download the [latest release](https://github.com/zanderp/miniflux.koplugin/releases/latest) (e.g. `miniflux.koplugin-0.0.20.zip`).
 2. Unzip and copy the **miniflux.koplugin** folder into KOReader’s plugin directory.
 3. Enable the plugin in KOReader.
 

@@ -113,6 +113,7 @@ function Prefetch.run(plugin, source, n)
     BatchDownloadEntriesWorkflow.execute({
         entry_data_list = to_download,
         settings = plugin.settings,
+        miniflux = plugin,
         completion_callback = function()
             Notification:success(T(_('Prefetched %1 entries'), #to_download))
         end,

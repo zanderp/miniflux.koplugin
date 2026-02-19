@@ -5,6 +5,7 @@ local socketutil = require('socketutil')
 local lfs = require('libs/libkoreader-lfs')
 local util = require('util')
 local _ = require('gettext')
+local logger = require('logger')
 
 -- [Third party](https://github.com/koreader/koreader-base/tree/master/thirdparty) tool
 -- https://github.com/msva/lua-htmlparser
@@ -71,6 +72,9 @@ function Images.discoverImages(content, base_url)
     local root = htmlparser.parse(content, 5000)
     local img_elements = root:select('img')
 
+    local img_elements_count = img_elements and #img_elements or 0
+    logger.dbg('[Miniflux:ImageDebug] discoverImages: content_len=', #content, 'img_elements_count=', img_elements_count)
+
     if img_elements then
         for _, img_element in ipairs(img_elements) do
             local attrs = img_element.attributes or {}
@@ -124,6 +128,7 @@ function Images.discoverImages(content, base_url)
         end
     end
 
+    logger.dbg('[Miniflux:ImageDebug] discoverImages: discovered_count=', #images)
     return images, seen_images
 end
 
@@ -199,6 +204,14 @@ function Images.downloadImage(config)
         or not config.entry_dir
         or not config.filename
     then
+        logger.dbg(
+            '[Miniflux:ImageDebug] download SKIP invalid config: url=',
+            config and config.url or 'nil',
+            'entry_dir=',
+            config and config.entry_dir or 'nil',
+            'filename=',
+            config and config.filename or 'nil'
+        )
         return false
     end
 
@@ -206,6 +219,15 @@ function Images.downloadImage(config)
 
     -- Choose high-resolution image if available
     local download_url = config.url2x or config.url
+    -- Decode HTML entities in URL (e.g. &amp; -> &) so the request is valid
+    download_url = download_url:gsub('&amp;', '&')
+
+    logger.dbg(
+        '[Miniflux:ImageDebug] download START url=',
+        download_url,
+        'filename=',
+        config.filename
+    )
 
     -- Build HTTP request configuration
     local http_config = {
@@ -230,6 +252,20 @@ function Images.downloadImage(config)
         end
     end
 
+    -- Reddit returns 403 without browser-like Referer/User-Agent. Apply only for Reddit image URLs.
+    if download_url:find('redd%.it') or download_url:find('reddit%.com') then
+        local entry_url_raw = config.entry_url or config.referer or 'https://www.reddit.com/'
+        if type(entry_url_raw) == 'string' then
+            entry_url_raw = entry_url_raw:gsub('&amp;', '&')
+        end
+        local referer = (entry_url_raw or 'https://www.reddit.com/'):gsub('^([^?]+)%?.*', '%1')
+        http_config.headers = http_config.headers or {}
+        http_config.headers['Referer'] = referer
+        -- Use same Chrome Mobile UA as HTML viewer (Reddit often allows this)
+        http_config.headers['User-Agent'] = 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36'
+        logger.dbg('[Miniflux:ImageDebug] Reddit headers Referer=', referer)
+    end
+
     -- Use KOReader's proper timeout constants
     socketutil:set_timeout(socketutil.FILE_BLOCK_TIMEOUT, socketutil.FILE_TOTAL_TIMEOUT)
 
@@ -242,6 +278,12 @@ function Images.downloadImage(config)
     -- Check for basic failure conditions
     if not result or status_code ~= 200 then
         os.remove(filepath) -- Clean up failed download
+        logger.dbg(
+            '[Miniflux:ImageDebug] download FAIL status_code=',
+            status_code or 'nil',
+            'url=',
+            download_url
+        )
         return false
     end
 
@@ -255,6 +297,12 @@ function Images.downloadImage(config)
             )
         then
             os.remove(filepath) -- Clean up invalid content
+            logger.dbg(
+                '[Miniflux:ImageDebug] download FAIL content_type=',
+                content_type,
+                'url=',
+                download_url
+            )
             return false
         end
     end
@@ -263,6 +311,7 @@ function Images.downloadImage(config)
     local file_attrs = lfs.attributes(filepath)
     if not file_attrs then
         os.remove(filepath)
+        logger.dbg('[Miniflux:ImageDebug] download FAIL file_attrs=nil url=', download_url)
         return false
     end
 
@@ -271,6 +320,12 @@ function Images.downloadImage(config)
     -- Sanity check file size (10 bytes minimum, 50MB maximum)
     if file_size < 10 or file_size > 50 * 1024 * 1024 then
         os.remove(filepath) -- Clean up invalid size
+        logger.dbg(
+            '[Miniflux:ImageDebug] download FAIL file_size=',
+            file_size,
+            'url=',
+            download_url
+        )
         return false
     end
 
@@ -279,10 +334,19 @@ function Images.downloadImage(config)
         local expected_size = tonumber(headers['content-length'])
         if expected_size and file_size ~= expected_size then
             os.remove(filepath) -- Clean up incomplete download
+            logger.dbg(
+                '[Miniflux:ImageDebug] download FAIL content_length_mismatch expected=',
+                expected_size,
+                'got=',
+                file_size,
+                'url=',
+                download_url
+            )
             return false
         end
     end
 
+    logger.dbg('[Miniflux:ImageDebug] download OK filename=', config.filename, 'size=', file_size)
     return true
 end
 

@@ -9,10 +9,17 @@ local Geom = require('ui/geometry')
 local UIManager = require('ui/uimanager')
 local Notification = require('shared/widgets/notification')
 local UrlFetch = require('shared/url_fetch')
+local socket_url = require('socket.url')
 local _ = require('gettext')
 local logger = require('logger')
 
 local HtmlViewer = {}
+
+-- Limits for inlining images in the viewer (avoid slow load / OOM)
+local MAX_IMAGES_TO_INLINE = 15
+local MAX_BYTES_PER_IMAGE = 500 * 1024  -- 500 KB
+local MAX_TOTAL_IMAGE_BYTES = 2 * 1024 * 1024  -- 2 MB
+local IMAGE_FETCH_TIMEOUT = 10
 
 local DEFAULT_FONT_SIZE = 22
 local MIN_FONT_SIZE = 12
@@ -52,12 +59,14 @@ pre, code { max-width: 100% !important; overflow-x: auto !important; }
     return reflow .. html
 end
 
----Return URL for print/reader version when possible to reduce payload and clutter on small devices.
----Appends ?print=1 or &print=1; many sites return a stripped page for this.
+---Return URL for print/reader version when possible. Skip for Reddit so we get normal page with images.
 ---@param url string Original article URL
----@return string URL to fetch (print version when supported)
-local function urlForPrintView(url)
+---@return string URL to fetch
+local function urlForFetch(url)
     if not url or url == '' then
+        return url
+    end
+    if url:match('reddit%.com') or url:match('redd%.it') then
         return url
     end
     if url:find('?') then
@@ -66,7 +75,157 @@ local function urlForPrintView(url)
     return url .. '?print=1'
 end
 
+---Base64-encode binary string for data URIs (pure Lua).
+---@param data string Binary string
+---@return string Base64-encoded string
+local function base64Encode(data)
+    local b64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    local s = {}
+    for i = 1, #data, 3 do
+        local a, b, c = data:byte(i, i + 2)
+        local n = (a or 0) * 65536 + (b or 0) * 256 + (c or 0)
+        for j = 1, 4 do
+            local idx = math.floor(n / 262144) % 64 + 1
+            s[#s + 1] = b64:sub(idx, idx)
+            n = (n % 262144) * 64
+        end
+    end
+    local pad = ({ 0, 2, 1 })[#data % 3 + 1]
+    for _ = 1, pad do s[#s] = nil end
+    for _ = 1, pad do s[#s + 1] = '=' end
+    return table.concat(s)
+end
+
+---Guess image MIME type from magic bytes.
+---@param data string First few bytes of image
+---@return string MIME type
+local function mimeFromMagic(data)
+    if not data or #data < 4 then
+        return 'image/jpeg'
+    end
+    if data:sub(1, 3) == '\x89PN' then
+        return 'image/png'
+    end
+    if data:sub(1, 2) == '\xff\xd8' then
+        return 'image/jpeg'
+    end
+    if data:sub(1, 4) == 'GIF8' then
+        return 'image/gif'
+    end
+    if data:sub(1, 4) == 'RIFF' and #data >= 12 and data:sub(9, 12) == 'WEBP' then
+        return 'image/webp'
+    end
+    return 'image/jpeg'
+end
+
+---Resolve image URL relative to page URL.
+---@param page_url string Full page URL (e.g. fetch_url)
+---@param src string img src value (may be relative or absolute)
+---@return string Absolute URL or nil if not http(s)
+local function resolveImageUrl(page_url, src)
+    if not src or src == '' or src:sub(1, 5) == 'data:' then
+        return nil
+    end
+    if src:sub(1, 5) == 'http:' or src:sub(1, 6) == 'https:' then
+        return src
+    end
+    local base = page_url:gsub('#?.*$', '')
+    if not base:match('/$') then
+        base = (base:match('^(.+)/') or base) .. '/'
+    end
+    return socket_url.absolute(base, src)
+end
+
+---Collect image URLs from img tags (src, data-src, data-url for lazy-loaded images e.g. Reddit).
+---@param html string Raw HTML
+---@param page_url string Page URL for resolving relative URLs
+---@return string[] urls Unique list of absolute image URLs
+local function collectImageUrls(html, page_url)
+    local seen = {}
+    local urls = {}
+    local function add(src)
+        if not src or src == '' then return end
+        local url = resolveImageUrl(page_url, src:gsub('&amp;', '&'))
+        if url and not seen[url] then
+            seen[url] = true
+            urls[#urls + 1] = url
+        end
+    end
+    for src in html:gmatch('<img[^>]*%ssrc=["\']([^"\']+)["\']') do
+        add(src)
+    end
+    for src in html:gmatch('<img[^>]*%sdata%-src=["\']([^"\']+)["\']') do
+        add(src)
+    end
+    for src in html:gmatch('<img[^>]*%sdata%-url=["\']([^"\']+)["\']') do
+        add(src)
+    end
+    return urls
+end
+
+---Fetch images referenced in HTML and replace img src (or data-src) with data URIs so they display.
+---Uses Referer for Reddit and other hosts. Respects MAX_IMAGES_TO_INLINE and size limits.
+---@param html string Raw HTML
+---@param page_url string Page URL for resolving relative img src and as Referer
+---@return string HTML with inlined image data URIs where fetch succeeded
+local function inlineImages(html, page_url)
+    if not html or not page_url then
+        return html
+    end
+    local urls = collectImageUrls(html, page_url)
+    if #urls == 0 then
+        return html
+    end
+    if #urls > MAX_IMAGES_TO_INLINE then
+        urls = { table.unpack(urls, 1, MAX_IMAGES_TO_INLINE) }
+    end
+    local cache = {}
+    local total_bytes = 0
+    for _, img_url in ipairs(urls) do
+        if total_bytes >= MAX_TOTAL_IMAGE_BYTES then
+            break
+        end
+        local body, _err = UrlFetch.fetch(img_url, {
+            timeout = IMAGE_FETCH_TIMEOUT,
+            max_size = MAX_BYTES_PER_IMAGE,
+            referer = page_url,
+            headers = { ['User-Agent'] = 'Mozilla/5.0 (Linux; Android 10; e-reader) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0 Mobile Safari/537.36' },
+        })
+        if body and #body > 0 and #body <= MAX_BYTES_PER_IMAGE and total_bytes + #body <= MAX_TOTAL_IMAGE_BYTES then
+            local mime = mimeFromMagic(body)
+            local b64 = base64Encode(body)
+            cache[img_url] = 'data:' .. mime .. ';base64,' .. b64
+            total_bytes = total_bytes + #body
+        end
+    end
+    if next(cache) == nil then
+        return html
+    end
+    -- Replace img src (and lazy-load data-src) with data URIs where we have a cached image
+    local function replaceImgTag(tag)
+        -- Replace src="..." with data URI if we have it
+        tag = tag:gsub('(src=["\'])([^"\']*)(["\'])', function(prefix, old_src, suffix)
+            local url = resolveImageUrl(page_url, old_src:gsub('&amp;', '&'))
+            if url and cache[url] then
+                return prefix .. cache[url] .. suffix
+            end
+            return prefix .. old_src .. suffix
+        end)
+        -- Lazy-loaded images: replace data-src="..." with src="data:..." so the image displays
+        tag = tag:gsub('data%-src=["\']([^"\']*)["\']', function(url_part)
+            local url = resolveImageUrl(page_url, url_part:gsub('&amp;', '&'))
+            if url and cache[url] then
+                return 'src="' .. cache[url] .. '"'
+            end
+            return 'data-src="' .. url_part .. '"'
+        end)
+        return tag
+    end
+    return html:gsub('<img[^>]+>', replaceImgTag)
+end
+
 ---Show article URL in an in-app HtmlBoxWidget (no external browser).
+---Fetches the page HTML, then fetches and inlines external images (up to a limit) so they display.
 ---@param url string Article URL to fetch and display
 ---@param title string|nil Optional title for the viewer
 ---@param opts table|nil Optional: { parent_browser = Browser } to track overlay so browser can close it first and avoid hang
@@ -77,8 +236,8 @@ function HtmlViewer.showUrl(url, title, opts)
         return
     end
 
-    -- Prefer print version so we don't overload the small viewer (less ads, simpler layout).
-    local fetch_url = urlForPrintView(url)
+    -- Use print version when it helps; skip for Reddit so we get images.
+    local fetch_url = urlForFetch(url)
 
     -- Show loading and force a repaint so it is visible before the blocking fetch (some devices don't refresh until touch).
     local loading = Notification:info(_('Loading…'))
@@ -120,6 +279,8 @@ function HtmlViewer.showUrl(url, title, opts)
             )
         end
 
+        -- Fetch external images and inline as data URIs so they display (limit count and size)
+        body = inlineImages(body, fetch_url)
         -- Reflow content to visible area (viewport + max-width so no horizontal scroll)
         body = injectReflowCss(body)
 

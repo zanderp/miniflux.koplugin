@@ -112,6 +112,12 @@ end
 function Miniflux:init()
     logger.info('[Miniflux:Main] Initializing plugin')
 
+    -- Ensure version is set for update check (e.g. from _meta if not set by plugin loader)
+    if not self.version then
+        local meta = require('_meta')
+        self.version = meta and meta.version or '0.0.0'
+    end
+
     self.settings = MinifluxSettings:new()
     logger.info('[Miniflux:Main] Settings initialized', MinifluxSettings)
 

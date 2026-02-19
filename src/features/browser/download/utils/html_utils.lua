@@ -50,8 +50,10 @@ function HtmlUtils.processEntryContent(raw_content, options)
     })
     processed_content = HtmlUtils.cleanHtmlContent(processed_content)
 
-    -- Create HTML document
-    local html_content = HtmlUtils.createHtmlDocument(entry_data, processed_content)
+    -- Create HTML document (entry_dir enables <base href="file://..."> so local images resolve)
+    local html_content = HtmlUtils.createHtmlDocument(entry_data, processed_content, {
+        entry_dir = options.entry_dir,
+    })
 
     if not html_content then
         return nil, Error.new('Failed to process HTML content')
@@ -64,15 +66,41 @@ end
 -- HTML DOCUMENT CREATION
 -- =============================================================================
 
+---Convert a local directory path to a file:// URL so relative img src resolve correctly in the reader.
+---@param entry_dir string Directory path (e.g. .../miniflux/123/) with trailing slash
+---@return string|nil file:// URL or nil
+local function pathToFileUrl(entry_dir)
+    if not entry_dir or entry_dir == '' then
+        return nil
+    end
+    local p = entry_dir:gsub('\\', '/'):gsub('/+$', '')
+    if p:sub(1, 1) == '/' then
+        return 'file://' .. p .. '/'
+    end
+    return 'file:///' .. p .. '/'
+end
+
 ---Create a complete HTML document for an entry
 ---@param entry MinifluxEntry Entry data
 ---@param content string Processed HTML content
+---@param opts table|nil Optional: { entry_dir = string } so we can inject <base href="file://..."> for local images
 ---@return string Complete HTML document
-function HtmlUtils.createHtmlDocument(entry, content)
+function HtmlUtils.createHtmlDocument(entry, content, opts)
+    opts = opts or {}
     local entry_title = entry.title or _('Untitled Entry')
 
     -- Use KOReader's built-in HTML escape (more robust than custom implementation)
     local escaped_title = util.htmlEscape(entry_title)
+
+    -- Base URL for relative image paths (so <img src="image_001.png"> resolves to entry dir)
+    local base_tag = ''
+    local entry_dir = opts.entry_dir
+    if entry_dir then
+        local file_url = pathToFileUrl(entry_dir)
+        if file_url then
+            base_tag = '\n    <base href="' .. util.htmlEscape(file_url) .. '">'
+        end
+    end
 
     -- Build metadata sections using table for efficient concatenation
     local metadata_sections = {}
@@ -122,12 +150,13 @@ function HtmlUtils.createHtmlDocument(entry, content)
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>%s</title>
+    <title>%s</title>%s
 </head>
 <body>
     <div class="entry-meta">
         <h1>%s</h1>]],
             escaped_title,
+            base_tag,
             escaped_title
         ),
         metadata_html ~= '' and ('\n        ' .. metadata_html) or '',

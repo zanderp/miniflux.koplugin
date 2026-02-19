@@ -330,22 +330,36 @@ function MinifluxEndOfBook:showDialog(entry_info)
                     callback = function()
                         UIManager:close(dialog)
                         local current_starred, current_status = getCurrentStarredAndStatus()
-                        local LastReturnedEntry = require('shared/last_returned_entry')
-                        LastReturnedEntry.entry_id = entry_info.entry_id
-                        LastReturnedEntry.is_read = EntryValidation.isEntryRead(current_status)
-                        LastReturnedEntry.is_starred = current_starred
+                        local auto_delete = self.miniflux.settings.auto_delete_read_on_close
+                            and EntryValidation.isEntryRead(current_status)
+                            and not current_starred
+                        local entry_id_to_delete =
+                            (auto_delete and EntryValidation.isValidId(entry_info.entry_id))
+                                and entry_info.entry_id
+                            or nil
                         BookmarkToggledFlag.toggled = false
                         local ReaderUI = require('apps/reader/readerui')
                         if ReaderUI.instance then
                             ReaderUI.instance:onClose()
                         end
+                        if entry_id_to_delete then
+                            UIManager:scheduleIn(0.15, function()
+                                EntryPaths.deleteLocalEntry(entry_id_to_delete, {
+                                    silent = true,
+                                    always_remove_from_history = true,
+                                })
+                            end)
+                        end
                         -- Refresh the listing when returning so it shows updated state (e.g. starred, read).
-                        UIManager:scheduleIn(0.2, function()
+                        -- Delay so reader close completes; invalidate caches then refresh so data is fresh.
+                        UIManager:scheduleIn(0.4, function()
                             local MainInstance = require('shared/main_instance')
                             local miniflux = MainInstance.main_instance
                             if miniflux and miniflux.browser then
                                 pcall(function()
+                                    miniflux.browser:invalidateAllCaches()
                                     miniflux.browser:refreshCurrentViewData()
+                                    miniflux.browser:refreshCurrentView()
                                 end)
                                 UIManager:setDirty('all', 'full')
                             end

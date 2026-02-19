@@ -126,7 +126,7 @@ end
 -- =============================================================================
 
 ---Download images with progress tracking and cancellation support
----@param opts table Options containing images, context, settings
+---@param opts table Options containing images, context, settings, entry_url (optional, for Reddit Referer)
 ---@return string PHASE_RESULTS value indicating completion status
 local function downloadImagesWithProgress(opts)
     -- Extract parameters from opts
@@ -136,6 +136,12 @@ local function downloadImagesWithProgress(opts)
 
     -- Early exit: Skip download loop if images disabled or no images found
     if not settings.include_images or #images == 0 then
+        logger.dbg(
+            '[Miniflux:ImageDebug] download SKIP early exit: include_images=',
+            settings.include_images,
+            'image_count=',
+            #images
+        )
         return PHASE_RESULTS.SUCCESS
     end
 
@@ -205,6 +211,7 @@ local function downloadImagesWithProgress(opts)
             entry_dir = context.entry_dir,
             filename = img.filename,
             settings = settings,
+            entry_url = opts.entry_url,
         })
 
         -- Track download results for later analysis and user feedback
@@ -460,8 +467,26 @@ function EntryWorkflow.execute(deps)
             return -- User cancelled - fire and forget
         end
 
+        -- Fetch full entry by ID so we get the same content as the web app (e.g. Reddit with images)
+        if miniflux and miniflux.entries then
+            local full_entry, _err = miniflux.entries:getEntry(entry_data.id, { dialogs = nil })
+            if full_entry and (full_entry.content or full_entry.summary) then
+                entry_data.content = full_entry.content
+                entry_data.summary = full_entry.summary
+            end
+        end
+
         -- Always discover images to build mapping (regardless of download setting)
         local content = entry_data.content or entry_data.summary or ''
+
+        logger.dbg(
+            '[Miniflux:ImageDebug] entry_id=',
+            entry_data.id,
+            'content_len=',
+            #content,
+            'content_preview=',
+            content:sub(1, 200):gsub('%s+', ' ')
+        )
 
         -- Process YouTube iframes first so thumbnail images are discovered
         content = HtmlUtils.processYouTubeIframes(content)
@@ -470,8 +495,14 @@ function EntryWorkflow.execute(deps)
         local images, seen_images = Images.discoverImages(content, base_url)
 
         if not images then
+            logger.dbg('[Miniflux:ImageDebug] discoverImages returned nil')
             Notification:error(_('Failed to discover images'))
             return -- Discovery failed - fire and forget
+        end
+
+        logger.dbg('[Miniflux:ImageDebug] discovered ', #images, ' images include_images=', settings.include_images)
+        for idx, img in ipairs(images) do
+            logger.dbg('[Miniflux:ImageDebug] image ', idx, ' src=', img.src, ' filename=', img.filename)
         end
 
         -- Build image mapping from discovered images (always needed for metadata)
@@ -491,6 +522,7 @@ function EntryWorkflow.execute(deps)
             images = images,
             context = context,
             settings = settings,
+            entry_url = entry_data.url,
         })
         if download_phase_status == PHASE_RESULTS.CANCELLED then
             return -- User cancelled - fire and forget

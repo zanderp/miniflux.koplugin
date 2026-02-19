@@ -189,6 +189,18 @@ function MinifluxAPI:getEntries(options, config)
     })
 end
 
+---Get a single entry by ID (full content, same as web app entry view)
+---@param entry_id number Entry ID
+---@param config? table Configuration with optional dialogs
+---@return MinifluxEntry|nil entry, Error|nil error
+function MinifluxAPI:getEntry(entry_id, config)
+    config = config or {}
+    local endpoint = '/entries/' .. tostring(entry_id)
+    return self.api_client:get(endpoint, {
+        dialogs = config.dialogs,
+    })
+end
+
 ---Toggle entry bookmark (star/unstar). PUT /v1/entries/:id/bookmark
 ---@param entry_id number Entry ID
 ---@param config? table Configuration with optional dialogs

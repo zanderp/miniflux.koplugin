@@ -3,6 +3,7 @@ local time = require('ui/time')
 local UIManager = require('ui/uimanager')
 local _ = require('gettext')
 local T = require('ffi/util').template
+local logger = require('logger')
 
 -- Import consolidated dependencies
 local EntryPaths = require('domains/utils/entry_paths')
@@ -27,6 +28,7 @@ function BatchDownloadEntriesWorkflow.execute(deps)
     local entry_data_list = deps.entry_data_list
     local settings = deps.settings
     local completion_callback = deps.completion_callback
+    local miniflux = deps.miniflux
 
     local total_entries = #entry_data_list
     if total_entries == 0 then
@@ -103,6 +105,15 @@ function BatchDownloadEntriesWorkflow.execute(deps)
             else
                 -- Fast refresh without cancellation check (prevents UI blocking)
                 Trapper:info(progress_message, true, true)
+            end
+
+            -- Fetch full entry by ID so we get the same content as the web app (e.g. Reddit with images)
+            if miniflux and miniflux.entries then
+                local full_entry, _err = miniflux.entries:getEntry(entry_data.id, { dialogs = nil })
+                if full_entry and (full_entry.content or full_entry.summary) then
+                    entry_data.content = full_entry.content
+                    entry_data.summary = full_entry.summary
+                end
             end
 
             -- Download individual entry with updated batch state
@@ -205,6 +216,15 @@ function BatchDownloadEntriesWorkflow.downloadSingleEntry(entry_data, opts)
     -- Discover images
     local content = entry_data.content or entry_data.summary or ''
 
+    logger.dbg(
+        '[Miniflux:ImageDebug] batch entry_id=',
+        entry_data.id,
+        'content_len=',
+        #content,
+        'content_preview=',
+        content:sub(1, 200):gsub('%s+', ' ')
+    )
+
     -- Process YouTube iframes first so thumbnail images are discovered
     content = HtmlUtils.processYouTubeIframes(content)
 
@@ -212,10 +232,37 @@ function BatchDownloadEntriesWorkflow.downloadSingleEntry(entry_data, opts)
     local images, seen_images = Images.discoverImages(content, base_url)
 
     if not images then
+        logger.dbg('[Miniflux:ImageDebug] batch discoverImages returned nil entry_id=', entry_data.id)
         return false
     end
 
+    logger.dbg(
+        '[Miniflux:ImageDebug] batch entry_id=',
+        entry_data.id,
+        'discovered=',
+        #images,
+        'include_images=',
+        settings.include_images,
+        'skip_images_for_all=',
+        batch_state.skip_images_for_all
+    )
+    for idx, img in ipairs(images) do
+        logger.dbg('[Miniflux:ImageDebug] batch image ', idx, ' src=', img.src, ' filename=', img.filename)
+    end
+
     -- Download images with detailed progress tracking and batch state awareness
+    if not (settings.include_images and #images > 0 and not batch_state.skip_images_for_all) then
+        logger.dbg(
+            '[Miniflux:ImageDebug] batch download SKIP entry_id=',
+            entry_data.id,
+            'include_images=',
+            settings.include_images,
+            'image_count=',
+            #images,
+            'skip_images_for_all=',
+            batch_state.skip_images_for_all
+        )
+    end
     if settings.include_images and #images > 0 and not batch_state.skip_images_for_all then
         local total_images = #images
         local time_prev = time.now()
@@ -293,6 +340,7 @@ function BatchDownloadEntriesWorkflow.downloadSingleEntry(entry_data, opts)
                 entry_dir = context.entry_dir,
                 filename = img.filename,
                 settings = settings,
+                entry_url = entry_data.url,
             })
             img.downloaded = success
             if not success then

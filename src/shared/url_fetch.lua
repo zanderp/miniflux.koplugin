@@ -14,7 +14,7 @@ local DEFAULT_TIMEOUT = 30
 
 ---Fetch URL and return body as string
 ---@param url string Full URL to fetch
----@param opts? { timeout?: number, max_size?: number, headers?: table } Optional headers (e.g. User-Agent for mobile)
+---@param opts? { timeout?: number, max_size?: number, headers?: table, referer?: string } Optional headers and referer (e.g. for Reddit images)
 ---@return string|nil body, string|nil error
 function UrlFetch.fetch(url, opts)
     opts = opts or {}
@@ -26,7 +26,14 @@ function UrlFetch.fetch(url, opts)
         for k, v in pairs(default_headers) do h[k] = v end
         for k, v in pairs(opts.headers) do h[k] = v end
         return h
-    end)() or default_headers
+    end)() or (function()
+        local h = {}
+        for k, v in pairs(default_headers) do h[k] = v end
+        return h
+    end)()
+    if opts.referer and opts.referer ~= '' then
+        headers['Referer'] = opts.referer
+    end
 
     local response_body = {}
     local request = {

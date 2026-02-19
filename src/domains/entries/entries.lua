@@ -89,6 +89,14 @@ function Entries:getEntries(options, config)
     return self.miniflux.api:getEntries(options, config)
 end
 
+---Get a single entry by ID (full content, same as web app)
+---@param entry_id number Entry ID
+---@param config? table Configuration with optional dialogs
+---@return MinifluxEntry|nil entry, Error|nil error
+function Entries:getEntry(entry_id, config)
+    return self.miniflux.api:getEntry(entry_id, config)
+end
+
 ---Mark all unread entries as read (batch: fetches unread with limit then updates status).
 ---@param config? table Optional dialogs
 ---@return boolean success
